@@ -35,7 +35,6 @@ async function getCardOrThrow(cardId: string): Promise<Card> {
   if (!card) {
     throw new Error(`Card not found: ${cardId}`);
   }
-
   return card;
 }
 
