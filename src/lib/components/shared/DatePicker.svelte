@@ -74,7 +74,7 @@
       <CalendarIcon class="size-4 text-muted-foreground" />
     </Popover.Trigger>
     <Popover.Content class="w-auto p-0" align="start">
-      <Calendar.Calendar value={calendarValue} onValueChange={handleCalendarChange} />
+      <Calendar.Calendar type="single" value={calendarValue} onValueChange={handleCalendarChange} />
     </Popover.Content>
   </Popover.Root>
 
