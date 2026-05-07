@@ -1,8 +1,14 @@
-import Dexie, { type IndexableType, type Table } from 'dexie';
+import Dexie, { type IndexableType, type Table, type UpdateSpec } from 'dexie';
 import type { Board, Card, Column } from '../types';
 
-type Entity = Board | Column | Card;
-type TableName = 'boards' | 'columns' | 'cards';
+type TableMap = {
+  boards: Board;
+  columns: Column;
+  cards: Card;
+};
+
+type TableName = keyof TableMap;
+type Entity = TableMap[TableName];
 type SortDirection = 1 | -1;
 
 type Query<T> = Partial<Record<keyof T, unknown>>;
@@ -52,7 +58,7 @@ export type DbTable<T extends Entity> = {
 
 type DbAdapter = {
   readonly provider: 'indexeddb' | 'moxt';
-  table<T extends Entity>(name: TableName): DbTable<T>;
+  table<K extends TableName>(name: K): DbTable<TableMap[K]>;
   transaction(
     mode: 'rw' | 'r',
     tableNames: TableName[],
@@ -116,7 +122,7 @@ class DexieTableAdapter<T extends Entity> implements DbTable<T> {
   }
 
   async update(id: string, changes: Partial<T>): Promise<number> {
-    return this.tableRef.update(id, changes as never);
+    return this.tableRef.update(id, changes as UpdateSpec<T>);
   }
 
   where<K extends keyof T>(field: K): DbWhereClause<T> {
@@ -142,14 +148,27 @@ class DexieAdapter implements DbAdapter {
 
   private readonly database = new DexieDatabase();
 
-  private readonly tables = {
+  private readonly tables: {
+    [K in TableName]: DexieTableAdapter<TableMap[K]>;
+  } = {
     boards: new DexieTableAdapter(this.database.boards),
     columns: new DexieTableAdapter(this.database.columns),
     cards: new DexieTableAdapter(this.database.cards),
   };
 
-  table<T extends Entity>(name: TableName): DbTable<T> {
-    return this.tables[name] as unknown as DbTable<T>;
+  table<K extends TableName>(name: K): DbTable<TableMap[K]> {
+    return this.tables[name];
+  }
+
+  private getTableRef(name: TableName): Table<Entity, string> {
+    switch (name) {
+      case 'boards':
+        return this.database.boards as Table<Entity, string>;
+      case 'columns':
+        return this.database.columns as Table<Entity, string>;
+      case 'cards':
+        return this.database.cards as Table<Entity, string>;
+    }
   }
 
   async transaction(
@@ -157,7 +176,7 @@ class DexieAdapter implements DbAdapter {
     tableNames: TableName[],
     action: () => Promise<unknown>,
   ): Promise<unknown> {
-    const tableRefs = tableNames.map((name) => this.database[name]);
+    const tableRefs = tableNames.map((name) => this.getTableRef(name));
     return (
       this.database.transaction as (...args: unknown[]) => Promise<unknown>
     )(mode, ...tableRefs, action);
@@ -257,11 +276,7 @@ class MoxtTableAdapter<T extends Entity> implements DbTable<T> {
 class MoxtAdapter implements DbAdapter {
   readonly provider = 'moxt' as const;
 
-  private readonly tables: {
-    boards: MoxtTableAdapter<Board>;
-    columns: MoxtTableAdapter<Column>;
-    cards: MoxtTableAdapter<Card>;
-  };
+  private readonly tables: { [K in TableName]: MoxtTableAdapter<TableMap[K]> };
 
   constructor(private readonly api: MoxtApi) {
     this.tables = {
@@ -273,8 +288,8 @@ class MoxtAdapter implements DbAdapter {
     };
   }
 
-  table<T extends Entity>(name: TableName): DbTable<T> {
-    return this.tables[name] as unknown as DbTable<T>;
+  table<K extends TableName>(name: K): DbTable<TableMap[K]> {
+    return this.tables[name];
   }
 
   async transaction(
@@ -286,22 +301,22 @@ class MoxtAdapter implements DbAdapter {
   }
 }
 
-class TableFacade<T extends Entity> implements DbTable<T> {
-  constructor(public readonly tableName: TableName) {}
+class TableFacade<K extends TableName> implements DbTable<TableMap[K]> {
+  constructor(public readonly tableName: K) {}
 
-  private get table(): DbTable<T> {
-    return activeAdapter.table<T>(this.tableName);
+  private get table(): DbTable<TableMap[K]> {
+    return activeAdapter.table(this.tableName);
   }
 
-  add(item: T): Promise<string> {
+  add(item: TableMap[K]): Promise<string> {
     return this.table.add(item);
   }
 
-  bulkAdd(items: T[]): Promise<void> {
+  bulkAdd(items: TableMap[K][]): Promise<void> {
     return this.table.bulkAdd(items);
   }
 
-  bulkPut(items: T[]): Promise<void> {
+  bulkPut(items: TableMap[K][]): Promise<void> {
     return this.table.bulkPut(items);
   }
 
@@ -313,19 +328,23 @@ class TableFacade<T extends Entity> implements DbTable<T> {
     return this.table.delete(id);
   }
 
-  get(id: string): Promise<T | undefined> {
+  get(id: string): Promise<TableMap[K] | undefined> {
     return this.table.get(id);
   }
 
-  orderBy<K extends keyof T>(field: K): DbOrderByClause<T> {
+  orderBy<Field extends keyof TableMap[K]>(
+    field: Field,
+  ): DbOrderByClause<TableMap[K]> {
     return this.table.orderBy(field);
   }
 
-  update(id: string, changes: Partial<T>): Promise<number> {
+  update(id: string, changes: Partial<TableMap[K]>): Promise<number> {
     return this.table.update(id, changes);
   }
 
-  where<K extends keyof T>(field: K): DbWhereClause<T> {
+  where<Field extends keyof TableMap[K]>(
+    field: Field,
+  ): DbWhereClause<TableMap[K]> {
     return this.table.where(field);
   }
 }
@@ -348,29 +367,26 @@ export async function initializeDatabase(): Promise<void> {
 }
 
 export const db = {
-  boards: new TableFacade<Board>('boards'),
-  columns: new TableFacade<Column>('columns'),
-  cards: new TableFacade<Card>('cards'),
+  boards: new TableFacade('boards'),
+  columns: new TableFacade('columns'),
+  cards: new TableFacade('cards'),
   get provider(): 'indexeddb' | 'moxt' {
     return activeAdapter.provider;
   },
-  async transaction(mode: 'rw' | 'r', ...args: unknown[]): Promise<unknown> {
-    const action = args[args.length - 1];
-    if (typeof action !== 'function') {
+  async transaction(
+    mode: 'rw' | 'r',
+    ...args: [...TableFacade<TableName>[], () => Promise<unknown>]
+  ): Promise<unknown> {
+    const tables = args.slice(0, -1) as TableFacade<TableName>[];
+    const action = args[args.length - 1] as
+      | (() => Promise<unknown>)
+      | undefined;
+    if (!action) {
       throw new Error('A transaction callback is required.');
     }
 
-    const tableNames = args
-      .slice(0, -1)
-      .filter(
-        (item): item is TableFacade<Entity> => item instanceof TableFacade,
-      )
-      .map((item) => item.tableName);
+    const tableNames = tables.map((item) => item.tableName);
 
-    return activeAdapter.transaction(
-      mode,
-      tableNames,
-      action as () => Promise<unknown>,
-    );
+    return activeAdapter.transaction(mode, tableNames, action);
   },
 };
