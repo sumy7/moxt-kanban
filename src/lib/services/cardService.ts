@@ -33,7 +33,7 @@ function validateTitle(title: string): string {
 async function getCardOrThrow(cardId: string): Promise<Card> {
   const card = await db.cards.get(cardId);
   if (!card) {
-    throw new Error('Card not found.');
+    throw new Error(`Card not found: ${cardId}`);
   }
 
   return card;
