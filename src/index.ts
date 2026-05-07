@@ -6,7 +6,7 @@ import { initializeDatabase } from './lib/db/database';
 await initializeDatabase();
 
 const app = mount(App, {
-  target: document.body,
+  target: document.querySelector('#root') || document.body,
 });
 
 export default app;
