@@ -140,7 +140,7 @@
 
           <div
             class="grid min-h-0 flex-1 auto-rows-min gap-2 overflow-y-auto"
-            role="list"
+            role="region"
             aria-label={`Cards in ${column.title}`}
             ondragover={(event) => setDropPosition(event, column.id, columnCards.length)}
             ondrop={(event) => dropToColumn(event, column.id)}
