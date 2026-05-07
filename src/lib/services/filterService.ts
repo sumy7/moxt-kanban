@@ -69,7 +69,7 @@ export function filterAndSortCards(
 
     if (
       filters.tags.length > 0 &&
-      !filters.tags.some((tag) => card.tags.includes(tag))
+      !filters.tags.every((tag) => card.tags.includes(tag))
     ) {
       return false;
     }
