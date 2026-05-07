@@ -72,7 +72,7 @@ class DexieDatabase extends Dexie {
   cards!: Table<Card, string>;
 
   constructor() {
-    super('kanban-mvp-db');
+    super('kanban-db');
 
     this.version(1).stores({
       boards: 'id, name, createdAt, updatedAt',
