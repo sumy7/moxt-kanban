@@ -65,7 +65,7 @@
   <Popover.Root bind:open>
     <Popover.Trigger
       type="button"
-      class="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring inline-flex h-9 w-full items-center justify-between rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+      class="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring inline-flex h-9 w-full items-center justify-between rounded-none border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
       {title}
     >
       <span class={calendarValue ? 'text-foreground' : 'text-muted-foreground'}>
@@ -73,7 +73,7 @@
       </span>
       <CalendarIcon class="size-4 text-muted-foreground" />
     </Popover.Trigger>
-    <Popover.Content class="w-auto p-0" align="start">
+    <Popover.Content class="w-auto rounded-none p-0" align="start">
       <Calendar.Calendar type="single" value={calendarValue} onValueChange={handleCalendarChange} />
     </Popover.Content>
   </Popover.Root>

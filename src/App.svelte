@@ -53,6 +53,7 @@
   let columnModalOpen = $state(false);
   let editingColumnId = $state<string | null>(null);
   let columnTitleInput = $state('');
+  let filterModalOpen = $state(false);
 
   let cardEditor = $state<CardEditorState>({
     open: false,
@@ -85,15 +86,6 @@
 
   const activeBoardLabel = $derived(activeBoard?.name ?? 'Select Board');
   const backendProviderLabel = $derived(db.provider === 'moxt' ? 'moxt' : 'indexeddb');
-
-  const filterColumnLabel = $derived.by(() => {
-    const selectedId = $filtersStore.columnIds[0];
-    if (!selectedId) {
-      return 'All Status';
-    }
-
-    return $columnsStore.find((column) => column.id === selectedId)?.title ?? 'All Status';
-  });
 
   const cardPriorityLabel = $derived(cardEditor.priority);
 
@@ -450,16 +442,15 @@
 </script>
 
 <main>
-  <header class="topbar">
-    <div class="title">
+  <header class="toolbar">
+    <div class="toolbar-title">
       <h1>Local-first Kanban</h1>
-      <p>Moxt API or IndexedDB powered task board</p>
       <span class="backend-chip" aria-label="Current backend provider">
         Backend: {backendProviderLabel}
       </span>
     </div>
 
-    <div class="board-tools">
+    <div class="toolbar-actions">
       <Select.Root
         type="single"
         value={$activeBoardIdStore ?? ''}
@@ -479,46 +470,24 @@
         <Button type="button" variant="outline" onclick={() => openBoardEdit(activeBoard)}>Rename</Button>
         <Button type="button" variant="destructive" onclick={() => requestDeleteBoard(activeBoard)}>Delete</Button>
       {/if}
+
+      <Button
+        type="button"
+        variant={$filtersStore.viewMode === 'board' ? 'default' : 'outline'}
+        onclick={() => toggleViewMode('board')}
+      >
+        Board View
+      </Button>
+      <Button
+        type="button"
+        variant={$filtersStore.viewMode === 'table' ? 'default' : 'outline'}
+        onclick={() => toggleViewMode('table')}
+      >
+        Table View
+      </Button>
+      <Button type="button" variant="outline" onclick={() => (filterModalOpen = true)}>Filters</Button>
     </div>
   </header>
-
-  <section class="switcher">
-    <Button
-      type="button"
-      variant={$filtersStore.viewMode === 'board' ? 'default' : 'outline'}
-      onclick={() => toggleViewMode('board')}
-    >
-      Board View
-    </Button>
-    <Button
-      type="button"
-      variant={$filtersStore.viewMode === 'table' ? 'default' : 'outline'}
-      onclick={() => toggleViewMode('table')}
-    >
-      Table View
-    </Button>
-
-    <Select.Root
-      type="single"
-      value={$filtersStore.columnIds[0] ?? '__all__'}
-      onValueChange={(value) =>
-        updateFilters({
-          columnIds: value === '__all__' ? [] : [value],
-        })}
-    >
-      <Select.Trigger class="w-[170px]">{filterColumnLabel}</Select.Trigger>
-      <Select.Content>
-        <Select.Item value="__all__">All Status</Select.Item>
-        {#each $columnsStore as column (column.id)}
-          <Select.Item value={column.id}>{column.title}</Select.Item>
-        {/each}
-      </Select.Content>
-    </Select.Root>
-
-    <Button type="button" variant="outline" onclick={resetFilters}>Reset Filters</Button>
-  </section>
-
-  <TableToolbar filters={$filtersStore} {availableTags} onFiltersChange={updateFilters} />
 
   <section class="content-region">
     {#if loading}
@@ -558,6 +527,21 @@
       />
     {/if}
   </section>
+
+  <Modal
+    open={filterModalOpen}
+    title="Filters"
+    onClose={() => (filterModalOpen = false)}
+    width="lg"
+  >
+    <TableToolbar
+      filters={$filtersStore}
+      columns={$columnsStore}
+      {availableTags}
+      onFiltersChange={updateFilters}
+      onReset={resetFilters}
+    />
+  </Modal>
 
   <Modal
     open={boardModalOpen}
@@ -727,53 +711,56 @@
   main {
     height: 100dvh;
     width: 100%;
-    padding: 1rem;
+    padding: 0.75rem;
     max-width: none;
     margin: 0;
     color: var(--foreground);
     display: flex;
     flex-direction: column;
-    gap: 0.8rem;
+    gap: 0.6rem;
     overflow: hidden;
   }
 
-  .topbar {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0.7rem;
-    align-items: end;
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    border: 1px solid var(--border);
+    padding: 0.5rem;
+    background: var(--card);
   }
 
   h1 {
     margin: 0;
-    font-size: 1.7rem;
-    line-height: 1.2;
+    font-size: 1rem;
+    line-height: 1;
   }
 
-  .title p {
-    margin: 0.3rem 0 0;
-    color: var(--muted-foreground);
+  .toolbar-title {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: max-content;
   }
 
   .backend-chip {
     display: inline-flex;
     align-items: center;
-    margin-top: 0.45rem;
-    padding: 0.18rem 0.52rem;
-    border-radius: 999px;
+    padding: 0.13rem 0.42rem;
     border: 1px solid var(--border);
     background: var(--secondary);
     color: var(--secondary-foreground);
-    font-size: 0.77rem;
+    font-size: 0.7rem;
     letter-spacing: 0.01em;
     text-transform: lowercase;
   }
 
-  .board-tools,
-  .switcher {
+  .toolbar-actions {
     display: flex;
     gap: 0.45rem;
     flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .content-region {
@@ -783,12 +770,17 @@
     display: flex;
   }
 
+  .content-region :global(*) {
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
+  }
+
   .status {
     width: 100%;
     align-self: flex-start;
     padding: 1rem;
     border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
     background: var(--card);
   }
 
@@ -829,7 +821,6 @@
     bottom: 1rem;
     z-index: 1200;
     padding: 0.65rem 0.85rem;
-    border-radius: var(--radius-lg);
     color: var(--primary-foreground);
     border: 1px solid var(--border);
     box-shadow: 0 12px 26px hsl(222 40% 8% / 0.16);
@@ -843,11 +834,18 @@
     background: var(--destructive);
   }
 
-  @media (min-width: 900px) {
-    .topbar {
-      grid-template-columns: 1fr auto;
+  @media (max-width: 1120px) {
+    .toolbar {
+      flex-direction: column;
+      align-items: stretch;
     }
 
+    .toolbar-actions {
+      justify-content: flex-start;
+    }
+  }
+
+  @media (min-width: 900px) {
     .grid-2 {
       grid-template-columns: 1fr 1fr;
     }

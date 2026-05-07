@@ -34,7 +34,7 @@
   <EmptyState title="No matching cards" description="Try changing search or filters." />
 {:else}
   <div class="table-wrap">
-    <Table.Root class="rounded-xl border bg-card">
+    <Table.Root class="w-full border bg-card">
       <Table.Header>
         <Table.Row>
           <Table.Head><Button variant="ghost" size="xs" onclick={() => onSort('title')}>Title {indicator('title')}</Button></Table.Head>
@@ -87,8 +87,10 @@
 
 <style>
   .table-wrap {
+    width: 100%;
     height: 100%;
     min-height: 0;
     overflow: auto;
+    display: block;
   }
 </style>

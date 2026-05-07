@@ -3,17 +3,19 @@
   import DatePicker from '../shared/DatePicker.svelte';
   import { Input } from '$lib/components/ui/input/index.js';
   import * as Select from '$lib/components/ui/select/index.js';
-  import type { CardFilters, CardPriority, SortDirection, SortField } from '../../types';
+  import type { CardFilters, CardPriority, Column, SortDirection, SortField } from '../../types';
 
   type Props = {
     filters: CardFilters;
+    columns: Column[];
     availableTags: string[];
     onFiltersChange: (next: Partial<CardFilters>) => void;
+    onReset: () => void;
   };
 
   const priorities: CardPriority[] = ['low', 'medium', 'high', 'urgent'];
 
-  let { filters, availableTags, onFiltersChange }: Props = $props();
+  let { filters, columns, availableTags, onFiltersChange, onReset }: Props = $props();
 
   let tagInput = $state('');
   const dueDateModeLabel = $derived.by(() => {
@@ -27,6 +29,14 @@
       return 'Overdue';
     }
     return 'All Due Date';
+  });
+  const filterColumnLabel = $derived.by(() => {
+    const selectedId = filters.columnIds[0];
+    if (!selectedId) {
+      return 'All Status';
+    }
+
+    return columns.find((column) => column.id === selectedId)?.title ?? 'All Status';
   });
 
   function togglePriority(priority: CardPriority): void {
@@ -60,6 +70,26 @@
 </script>
 
 <div class="toolbar">
+  <div class="inline-group">
+    <Select.Root
+      type="single"
+      value={filters.columnIds[0] ?? '__all__'}
+      onValueChange={(value) =>
+        onFiltersChange({
+          columnIds: value === '__all__' ? [] : [value],
+        })}
+    >
+      <Select.Trigger class="w-[170px]">{filterColumnLabel}</Select.Trigger>
+      <Select.Content>
+        <Select.Item value="__all__">All Status</Select.Item>
+        {#each columns as column (column.id)}
+          <Select.Item value={column.id}>{column.title}</Select.Item>
+        {/each}
+      </Select.Content>
+    </Select.Root>
+    <Button type="button" variant="outline" onclick={onReset}>Reset</Button>
+  </div>
+
   <Input
     type="search"
     value={filters.searchText}
@@ -136,7 +166,6 @@
     display: grid;
     gap: 0.7rem;
     grid-template-columns: 1.2fr;
-    margin-bottom: 1rem;
   }
 
   .inline-group {
