@@ -2,21 +2,22 @@
   import { ChevronLeft, ChevronRight, GripVertical, Pencil, Plus, Trash2 } from '@lucide/svelte';
   import { Badge } from '$lib/components/ui/badge/index.js';
   import { Button } from '$lib/components/ui/button/index.js';
-  import * as Card from '$lib/components/ui/card/index.js';
-  import type { Card, Column } from '../../types';
+  import * as UiCard from '$lib/components/ui/card/index.js';
+  import type { Card as KanbanCard, Column } from '../../types';
   import EmptyState from '../shared/EmptyState.svelte';
+  import { formatDate } from '../../utils/date';
 
   type Props = {
     columns: Column[];
-    cardsByColumn: Record<string, Card[]>;
+    cardsByColumn: Record<string, KanbanCard[]>;
     onAddColumn: () => void;
     onMoveColumnLeft: (column: Column) => void;
     onMoveColumnRight: (column: Column) => void;
     onEditColumn: (column: Column) => void;
     onDeleteColumn: (column: Column) => void;
     onAddCard: (columnId: string) => void;
-    onEditCard: (card: Card) => void;
-    onDeleteCard: (card: Card) => void;
+    onEditCard: (card: KanbanCard) => void;
+    onDeleteCard: (card: KanbanCard) => void;
     onDropCard: (cardId: string, toColumnId: string, toIndex: number) => void;
   };
 
@@ -36,7 +37,7 @@
 
   let keyboardSelectedCardId = $state<string | null>(null);
 
-  function startDrag(event: DragEvent, card: Card): void {
+  function startDrag(event: DragEvent, card: KanbanCard): void {
     if (!event.dataTransfer) {
       return;
     }
@@ -102,7 +103,7 @@
 
   function handleCardKeydown(
     event: KeyboardEvent,
-    card: Card,
+    card: KanbanCard,
     columnId: string,
     index: number,
   ): void {
@@ -226,41 +227,43 @@
                 }}
                 onkeydown={(event) => handleCardKeydown(event, card, column.id, index)}
               >
-                <Card.Root size="sm" class="gap-2">
-                  <Card.Content class="space-y-2 px-3">
-                    <Card.Title class="flex items-center gap-1 text-xs">
+                <UiCard.Root size="sm" class="gap-2">
+                  <UiCard.Content class="space-y-2 px-3">
+                    <UiCard.Title class="flex items-center gap-1 text-xs">
                       <GripVertical class="size-3 text-muted-foreground" />
                       {card.title}
-                    </Card.Title>
-                    <Card.Description class="line-clamp-3 text-xs">{card.description || 'No description'}</Card.Description>
-                  </Card.Content>
-                <div class="flex items-center justify-between gap-2 px-3 text-[11px] text-muted-foreground">
-                  <Badge
-                    variant={
-                      card.priority === 'urgent'
-                        ? 'destructive'
-                        : card.priority === 'high'
-                          ? 'secondary'
-                          : 'outline'
-                    }
-                  >
-                    {card.priority}
-                  </Badge>
-                  {#if card.dueDate}
-                    <span>Due {card.dueDate}</span>
-                  {/if}
-                </div>
-                <Card.Footer class="justify-end gap-1 px-3 pb-3">
-                  <Button type="button" size="icon-xs" variant="outline" onclick={() => onEditCard(card)}>
-                    <Pencil class="size-3.5" />
-                    <span class="sr-only">Edit</span>
-                  </Button>
-                  <Button type="button" size="icon-xs" variant="destructive" onclick={() => onDeleteCard(card)}>
-                    <Trash2 class="size-3.5" />
-                    <span class="sr-only">Delete</span>
-                  </Button>
-                </Card.Footer>
-                </Card.Root>
+                    </UiCard.Title>
+                    <UiCard.Description class="line-clamp-3 text-xs">
+                      {card.description || 'No description'}
+                    </UiCard.Description>
+                  </UiCard.Content>
+                  <div class="flex items-center justify-between gap-2 px-3 text-[11px] text-muted-foreground">
+                    <Badge
+                      variant={
+                        card.priority === 'urgent'
+                          ? 'destructive'
+                          : card.priority === 'high'
+                            ? 'secondary'
+                            : 'outline'
+                      }
+                    >
+                      {card.priority}
+                    </Badge>
+                    {#if card.dueDate}
+                      <span>Due {formatDate(card.dueDate)}</span>
+                    {/if}
+                  </div>
+                  <UiCard.Footer class="justify-end gap-1 px-3 pb-3">
+                    <Button type="button" size="icon-xs" variant="outline" onclick={() => onEditCard(card)}>
+                      <Pencil class="size-3.5" />
+                      <span class="sr-only">Edit</span>
+                    </Button>
+                    <Button type="button" size="icon-xs" variant="destructive" onclick={() => onDeleteCard(card)}>
+                      <Trash2 class="size-3.5" />
+                      <span class="sr-only">Delete</span>
+                    </Button>
+                  </UiCard.Footer>
+                </UiCard.Root>
               </div>
             {/each}
           </div>

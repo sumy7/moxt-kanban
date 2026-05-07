@@ -30,6 +30,14 @@ function validateTitle(title: string): string {
   return value;
 }
 
+async function getCardOrThrow(cardId: string): Promise<Card> {
+  const card = await db.cards.get(cardId);
+  if (!card) {
+    throw new Error(`Card not found: ${cardId}`);
+  }
+  return card;
+}
+
 async function normalizeColumnOrder(columnId: string): Promise<void> {
   const now = nowIso();
   const cards = (
@@ -78,10 +86,7 @@ export const cardService = {
   },
 
   async update(cardId: string, update: CardUpdate): Promise<void> {
-    const card = await db.cards.get(cardId);
-    if (!card) {
-      return;
-    }
+    const card = await getCardOrThrow(cardId);
 
     const title = validateTitle(update.title);
     const now = nowIso();
@@ -124,10 +129,7 @@ export const cardService = {
   },
 
   async remove(cardId: string): Promise<void> {
-    const card = await db.cards.get(cardId);
-    if (!card) {
-      return;
-    }
+    const card = await getCardOrThrow(cardId);
 
     await db.transaction('rw', db.cards, async () => {
       await db.cards.delete(cardId);
@@ -140,10 +142,7 @@ export const cardService = {
     toColumnId: string,
     toIndex: number,
   ): Promise<void> {
-    const card = await db.cards.get(cardId);
-    if (!card) {
-      return;
-    }
+    const card = await getCardOrThrow(cardId);
 
     await db.transaction('rw', db.cards, async () => {
       const sourceCards = (

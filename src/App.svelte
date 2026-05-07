@@ -624,7 +624,7 @@
 
       <label>
         Description
-        <Textarea rows="4" bind:value={cardEditor.description}></Textarea>
+        <Textarea rows={4} bind:value={cardEditor.description}></Textarea>
       </label>
 
       <div class="grid-2">
