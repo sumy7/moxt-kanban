@@ -709,6 +709,7 @@
   }
 
   main {
+    height: 100vh;
     height: 100dvh;
     width: 100%;
     padding: 0.75rem;
@@ -770,7 +771,7 @@
     display: flex;
   }
 
-  .content-region :global(*) {
+  .content-region > :global(*) {
     min-width: 0;
     min-height: 0;
     width: 100%;

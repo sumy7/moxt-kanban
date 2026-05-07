@@ -114,6 +114,7 @@
           class={`flex h-full max-h-full min-h-[220px] w-[320px] flex-col gap-2 border bg-card p-2 text-card-foreground transition-colors ${
             activeDropColumnId === column.id ? 'border-primary bg-accent/35' : 'border-border'
           }`}
+          style="--column-card-height: 74px;"
         >
           <header class="flex items-start justify-between gap-2">
             <h3 class="pt-1 text-sm font-semibold">{column.title}</h3>
@@ -152,6 +153,7 @@
               <div
                 draggable="true"
                 class={`transition duration-150 ease-out ${draggingCardId === card.id ? 'scale-[0.98] opacity-45' : 'opacity-100'}`}
+                style="min-height: var(--column-card-height);"
                 role="listitem"
                 aria-label={`Card ${card.title}`}
                 ondragstart={(event) => startDrag(event, card)}
@@ -222,7 +224,8 @@
 
 <style>
   .drop-placeholder {
-    height: 74px;
+    --placeholder-offset: 6px;
+    height: var(--column-card-height);
     border: 1px dashed var(--primary);
     background: color-mix(in oklch, var(--accent) 72%, transparent);
     animation: placeholder-move 150ms ease-out;
@@ -230,7 +233,7 @@
 
   @keyframes placeholder-move {
     0% {
-      transform: translateY(6px);
+      transform: translateY(var(--placeholder-offset));
       opacity: 0.45;
     }
     100% {
