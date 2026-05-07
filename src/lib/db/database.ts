@@ -1,0 +1,376 @@
+import Dexie, { type IndexableType, type Table } from 'dexie';
+import type { Board, Card, Column } from '../types';
+
+type Entity = Board | Column | Card;
+type TableName = 'boards' | 'columns' | 'cards';
+type SortDirection = 1 | -1;
+
+type Query<T> = Partial<Record<keyof T, unknown>>;
+type Sort<T> = Partial<Record<keyof T, SortDirection>>;
+
+type MoxtCollection<T extends { id: string }> = {
+  find(query?: Query<T>, options?: { sort?: Sort<T> }): Promise<T[]>;
+  insertOne(document: T): Promise<unknown>;
+  updateOne(filter: Query<T>, update: { $set: Partial<T> }): Promise<unknown>;
+  deleteOne(filter: Query<T>): Promise<unknown>;
+};
+
+type MoxtApi = {
+  collection<T extends { id: string }>(name: string): MoxtCollection<T>;
+};
+
+type DbWhereEquals<T extends Entity> = {
+  toArray(): Promise<T[]>;
+  sortBy<K extends keyof T>(field: K): Promise<T[]>;
+  delete(): Promise<number>;
+};
+
+type DbWhereClause<T extends Entity> = {
+  equals(value: unknown): DbWhereEquals<T>;
+};
+
+type DbOrderByArray<T extends Entity> = {
+  toArray(): Promise<T[]>;
+};
+
+type DbOrderByClause<T extends Entity> = {
+  reverse(): DbOrderByArray<T>;
+  toArray(): Promise<T[]>;
+};
+
+export type DbTable<T extends Entity> = {
+  add(item: T): Promise<string>;
+  bulkAdd(items: T[]): Promise<void>;
+  bulkPut(items: T[]): Promise<void>;
+  count(): Promise<number>;
+  delete(id: string): Promise<void>;
+  get(id: string): Promise<T | undefined>;
+  orderBy<K extends keyof T>(field: K): DbOrderByClause<T>;
+  update(id: string, changes: Partial<T>): Promise<number>;
+  where<K extends keyof T>(field: K): DbWhereClause<T>;
+};
+
+type DbAdapter = {
+  readonly provider: 'indexeddb' | 'moxt';
+  table<T extends Entity>(name: TableName): DbTable<T>;
+  transaction(
+    mode: 'rw' | 'r',
+    tableNames: TableName[],
+    action: () => Promise<unknown>,
+  ): Promise<unknown>;
+};
+
+class DexieDatabase extends Dexie {
+  boards!: Table<Board, string>;
+  columns!: Table<Column, string>;
+  cards!: Table<Card, string>;
+
+  constructor() {
+    super('kanban-mvp-db');
+
+    this.version(1).stores({
+      boards: 'id, name, createdAt, updatedAt',
+      columns: 'id, boardId, [boardId+order], createdAt, updatedAt',
+      cards:
+        'id, boardId, columnId, [columnId+order], dueDate, priority, createdAt, updatedAt',
+    });
+  }
+}
+
+class DexieTableAdapter<T extends Entity> implements DbTable<T> {
+  constructor(private readonly tableRef: Table<T, string>) {}
+
+  async add(item: T): Promise<string> {
+    return this.tableRef.add(item);
+  }
+
+  async bulkAdd(items: T[]): Promise<void> {
+    await this.tableRef.bulkAdd(items);
+  }
+
+  async bulkPut(items: T[]): Promise<void> {
+    await this.tableRef.bulkPut(items);
+  }
+
+  async count(): Promise<number> {
+    return this.tableRef.count();
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.tableRef.delete(id);
+  }
+
+  async get(id: string): Promise<T | undefined> {
+    return this.tableRef.get(id);
+  }
+
+  orderBy<K extends keyof T>(field: K): DbOrderByClause<T> {
+    const collection = this.tableRef.orderBy(field as string);
+
+    return {
+      reverse: () => ({
+        toArray: () => collection.reverse().toArray(),
+      }),
+      toArray: () => collection.toArray(),
+    };
+  }
+
+  async update(id: string, changes: Partial<T>): Promise<number> {
+    return this.tableRef.update(id, changes as never);
+  }
+
+  where<K extends keyof T>(field: K): DbWhereClause<T> {
+    return {
+      equals: (value: unknown) => {
+        const collection = this.tableRef
+          .where(field as string)
+          .equals(value as IndexableType);
+
+        return {
+          toArray: () => collection.toArray(),
+          sortBy: <S extends keyof T>(sortField: S) =>
+            collection.sortBy(sortField as string),
+          delete: () => collection.delete(),
+        };
+      },
+    };
+  }
+}
+
+class DexieAdapter implements DbAdapter {
+  readonly provider = 'indexeddb' as const;
+
+  private readonly database = new DexieDatabase();
+
+  private readonly tables = {
+    boards: new DexieTableAdapter(this.database.boards),
+    columns: new DexieTableAdapter(this.database.columns),
+    cards: new DexieTableAdapter(this.database.cards),
+  };
+
+  table<T extends Entity>(name: TableName): DbTable<T> {
+    return this.tables[name] as unknown as DbTable<T>;
+  }
+
+  async transaction(
+    mode: 'rw' | 'r',
+    tableNames: TableName[],
+    action: () => Promise<unknown>,
+  ): Promise<unknown> {
+    const tableRefs = tableNames.map((name) => this.database[name]);
+    return (
+      this.database.transaction as (...args: unknown[]) => Promise<unknown>
+    )(mode, ...tableRefs, action);
+  }
+}
+
+class MoxtTableAdapter<T extends Entity> implements DbTable<T> {
+  constructor(private readonly collection: MoxtCollection<T>) {}
+
+  private async upsert(item: T): Promise<void> {
+    const existing = await this.collection.find({ id: item.id } as Query<T>);
+    if (existing.length > 0) {
+      await this.collection.updateOne({ id: item.id } as Query<T>, {
+        $set: item,
+      });
+      return;
+    }
+
+    await this.collection.insertOne(item);
+  }
+
+  async add(item: T): Promise<string> {
+    await this.collection.insertOne(item);
+    return item.id;
+  }
+
+  async bulkAdd(items: T[]): Promise<void> {
+    await Promise.all(items.map((item) => this.collection.insertOne(item)));
+  }
+
+  async bulkPut(items: T[]): Promise<void> {
+    for (const item of items) {
+      await this.upsert(item);
+    }
+  }
+
+  async count(): Promise<number> {
+    const rows = await this.collection.find({} as Query<T>);
+    return rows.length;
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.collection.deleteOne({ id } as Query<T>);
+  }
+
+  async get(id: string): Promise<T | undefined> {
+    const rows = await this.collection.find({ id } as Query<T>);
+    return rows[0];
+  }
+
+  orderBy<K extends keyof T>(field: K): DbOrderByClause<T> {
+    return {
+      reverse: () => ({
+        toArray: () =>
+          this.collection.find({} as Query<T>, {
+            sort: { [field]: -1 } as Sort<T>,
+          }),
+      }),
+      toArray: () =>
+        this.collection.find({} as Query<T>, {
+          sort: { [field]: 1 } as Sort<T>,
+        }),
+    };
+  }
+
+  async update(id: string, changes: Partial<T>): Promise<number> {
+    await this.collection.updateOne({ id } as Query<T>, { $set: changes });
+    return 1;
+  }
+
+  where<K extends keyof T>(field: K): DbWhereClause<T> {
+    return {
+      equals: (value: unknown) => {
+        const query = { [field]: value } as Query<T>;
+
+        return {
+          toArray: () => this.collection.find(query),
+          sortBy: <S extends keyof T>(sortField: S) =>
+            this.collection.find(query, {
+              sort: { [sortField]: 1 } as Sort<T>,
+            }),
+          delete: async () => {
+            const rows = await this.collection.find(query);
+            await Promise.all(
+              rows.map((row) =>
+                this.collection.deleteOne({ id: row.id } as Query<T>),
+              ),
+            );
+            return rows.length;
+          },
+        };
+      },
+    };
+  }
+}
+
+class MoxtAdapter implements DbAdapter {
+  readonly provider = 'moxt' as const;
+
+  private readonly tables: {
+    boards: MoxtTableAdapter<Board>;
+    columns: MoxtTableAdapter<Column>;
+    cards: MoxtTableAdapter<Card>;
+  };
+
+  constructor(private readonly api: MoxtApi) {
+    this.tables = {
+      boards: new MoxtTableAdapter<Board>(this.api.collection<Board>('boards')),
+      columns: new MoxtTableAdapter<Column>(
+        this.api.collection<Column>('columns'),
+      ),
+      cards: new MoxtTableAdapter<Card>(this.api.collection<Card>('cards')),
+    };
+  }
+
+  table<T extends Entity>(name: TableName): DbTable<T> {
+    return this.tables[name] as unknown as DbTable<T>;
+  }
+
+  async transaction(
+    _mode: 'rw' | 'r',
+    _tableNames: TableName[],
+    action: () => Promise<unknown>,
+  ): Promise<unknown> {
+    return action();
+  }
+}
+
+class TableFacade<T extends Entity> implements DbTable<T> {
+  constructor(public readonly tableName: TableName) {}
+
+  private get table(): DbTable<T> {
+    return activeAdapter.table<T>(this.tableName);
+  }
+
+  add(item: T): Promise<string> {
+    return this.table.add(item);
+  }
+
+  bulkAdd(items: T[]): Promise<void> {
+    return this.table.bulkAdd(items);
+  }
+
+  bulkPut(items: T[]): Promise<void> {
+    return this.table.bulkPut(items);
+  }
+
+  count(): Promise<number> {
+    return this.table.count();
+  }
+
+  delete(id: string): Promise<void> {
+    return this.table.delete(id);
+  }
+
+  get(id: string): Promise<T | undefined> {
+    return this.table.get(id);
+  }
+
+  orderBy<K extends keyof T>(field: K): DbOrderByClause<T> {
+    return this.table.orderBy(field);
+  }
+
+  update(id: string, changes: Partial<T>): Promise<number> {
+    return this.table.update(id, changes);
+  }
+
+  where<K extends keyof T>(field: K): DbWhereClause<T> {
+    return this.table.where(field);
+  }
+}
+
+const dexieAdapter = new DexieAdapter();
+let activeAdapter: DbAdapter = dexieAdapter;
+
+function resolveMoxtApi(): MoxtApi | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const maybeApi = (window as Window & { moxt?: MoxtApi }).moxt;
+  return maybeApi ?? null;
+}
+
+export async function initializeDatabase(): Promise<void> {
+  const moxtApi = resolveMoxtApi();
+  activeAdapter = moxtApi ? new MoxtAdapter(moxtApi) : dexieAdapter;
+}
+
+export const db = {
+  boards: new TableFacade<Board>('boards'),
+  columns: new TableFacade<Column>('columns'),
+  cards: new TableFacade<Card>('cards'),
+  get provider(): 'indexeddb' | 'moxt' {
+    return activeAdapter.provider;
+  },
+  async transaction(mode: 'rw' | 'r', ...args: unknown[]): Promise<unknown> {
+    const action = args[args.length - 1];
+    if (typeof action !== 'function') {
+      throw new Error('A transaction callback is required.');
+    }
+
+    const tableNames = args
+      .slice(0, -1)
+      .filter(
+        (item): item is TableFacade<Entity> => item instanceof TableFacade,
+      )
+      .map((item) => item.tableName);
+
+    return activeAdapter.transaction(
+      mode,
+      tableNames,
+      action as () => Promise<unknown>,
+    );
+  },
+};
