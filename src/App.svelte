@@ -520,42 +520,44 @@
 
   <TableToolbar filters={$filtersStore} {availableTags} onFiltersChange={updateFilters} />
 
-  {#if loading}
-    <p class="status">Loading...</p>
-  {:else if errorMessage}
-    <p class="status error">{errorMessage}</p>
-  {:else if !$activeBoardIdStore}
-    <EmptyState
-      title="No boards"
-      description="Create your first board to start organizing work."
-      actionText="Create Board"
-      onAction={openBoardCreate}
-    />
-  {:else if $filtersStore.viewMode === 'board'}
-    <BoardView
-      columns={$columnsStore}
-      {cardsByColumn}
-      onAddColumn={openColumnCreate}
-      onMoveColumnLeft={(column) => moveColumn(column, 'left')}
-      onMoveColumnRight={(column) => moveColumn(column, 'right')}
-      onEditColumn={openColumnEdit}
-      onDeleteColumn={requestDeleteColumn}
-      onAddCard={openCardCreate}
-      onEditCard={openCardEdit}
-      onDeleteCard={requestDeleteCard}
-      onDropCard={dropCard}
-    />
-  {:else}
-    <TableView
-      cards={visibleCards}
-      columns={$columnsStore}
-      sortField={$filtersStore.sortField}
-      sortDirection={$filtersStore.sortDirection}
-      onSort={updateSort}
-      onEditCard={openCardEdit}
-      onDeleteCard={requestDeleteCard}
-    />
-  {/if}
+  <section class="content-region">
+    {#if loading}
+      <p class="status">Loading...</p>
+    {:else if errorMessage}
+      <p class="status error">{errorMessage}</p>
+    {:else if !$activeBoardIdStore}
+      <EmptyState
+        title="No boards"
+        description="Create your first board to start organizing work."
+        actionText="Create Board"
+        onAction={openBoardCreate}
+      />
+    {:else if $filtersStore.viewMode === 'board'}
+      <BoardView
+        columns={$columnsStore}
+        {cardsByColumn}
+        onAddColumn={openColumnCreate}
+        onMoveColumnLeft={(column) => moveColumn(column, 'left')}
+        onMoveColumnRight={(column) => moveColumn(column, 'right')}
+        onEditColumn={openColumnEdit}
+        onDeleteColumn={requestDeleteColumn}
+        onAddCard={openCardCreate}
+        onEditCard={openCardEdit}
+        onDeleteCard={requestDeleteCard}
+        onDropCard={dropCard}
+      />
+    {:else}
+      <TableView
+        cards={visibleCards}
+        columns={$columnsStore}
+        sortField={$filtersStore.sortField}
+        sortDirection={$filtersStore.sortDirection}
+        onSort={updateSort}
+        onEditCard={openCardEdit}
+        onDeleteCard={requestDeleteCard}
+      />
+    {/if}
+  </section>
 
   <Modal
     open={boardModalOpen}
@@ -716,12 +718,23 @@
 </main>
 
 <style>
+  :global(html),
+  :global(body),
+  :global(#app) {
+    height: 100%;
+  }
+
   main {
-    min-height: 100vh;
-    padding: 1rem 1.1rem 2rem;
-    max-width: 1260px;
-    margin: 0 auto;
+    height: 100dvh;
+    width: 100%;
+    padding: 1rem;
+    max-width: none;
+    margin: 0;
     color: var(--foreground);
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    overflow: hidden;
   }
 
   .topbar {
@@ -729,7 +742,6 @@
     grid-template-columns: 1fr;
     gap: 0.7rem;
     align-items: end;
-    margin-bottom: 0.8rem;
   }
 
   h1 {
@@ -764,14 +776,19 @@
     flex-wrap: wrap;
   }
 
-  .switcher {
-    margin-bottom: 0.8rem;
+  .content-region {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
   }
 
   .status {
+    width: 100%;
+    align-self: flex-start;
     padding: 1rem;
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     background: var(--card);
   }
 
@@ -812,7 +829,7 @@
     bottom: 1rem;
     z-index: 1200;
     padding: 0.65rem 0.85rem;
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     color: var(--primary-foreground);
     border: 1px solid var(--border);
     box-shadow: 0 12px 26px hsl(222 40% 8% / 0.16);

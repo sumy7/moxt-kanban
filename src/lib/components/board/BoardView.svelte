@@ -36,14 +36,38 @@
   }: Props = $props();
 
   let keyboardSelectedCardId = $state<string | null>(null);
+  let draggingCardId = $state<string | null>(null);
+  let activeDropColumnId = $state<string | null>(null);
+  let activeDropCardId = $state<string | null>(null);
+  let recentlyDroppedCardId = $state<string | null>(null);
+  let dropAnimationTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  function markCardDropped(cardId: string): void {
+    recentlyDroppedCardId = cardId;
+    if (dropAnimationTimeout) {
+      clearTimeout(dropAnimationTimeout);
+    }
+    dropAnimationTimeout = setTimeout(() => {
+      recentlyDroppedCardId = null;
+      dropAnimationTimeout = null;
+    }, 220);
+  }
 
   function startDrag(event: DragEvent, card: KanbanCard): void {
     if (!event.dataTransfer) {
       return;
     }
 
+    draggingCardId = card.id;
+    activeDropCardId = null;
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('application/json', JSON.stringify({ cardId: card.id }));
+  }
+
+  function handleDragEnd(): void {
+    draggingCardId = null;
+    activeDropColumnId = null;
+    activeDropCardId = null;
   }
 
   function readPayload(event: DragEvent): { cardId: string } | null {
@@ -74,6 +98,9 @@
 
     const list = cardsByColumn[columnId] ?? [];
     onDropCard(keyboardSelectedCardId, columnId, list.length);
+    markCardDropped(keyboardSelectedCardId);
+    activeDropColumnId = null;
+    activeDropCardId = null;
   }
 
   function handleColumnDrop(event: DragEvent, columnId: string): void {
@@ -85,6 +112,9 @@
 
     const list = cardsByColumn[columnId] ?? [];
     onDropCard(payload.cardId, columnId, list.length);
+    markCardDropped(payload.cardId);
+    activeDropColumnId = null;
+    activeDropCardId = null;
   }
 
   function handleColumnDropZoneKeydown(event: KeyboardEvent, columnId: string): void {
@@ -161,10 +191,10 @@
     onAction={onAddColumn}
   />
 {:else}
-  <div class="overflow-x-auto pb-3">
-    <div class="flex min-w-max items-start gap-4">
+  <div class="h-full overflow-x-auto pb-2">
+    <div class="flex h-full min-w-max items-stretch gap-4">
       {#each columns as column (column.id)}
-        <section class="flex min-h-[220px] w-[320px] flex-col gap-3 rounded-lg border bg-card p-3 text-card-foreground">
+        <section class="flex h-full max-h-full min-h-[220px] w-[320px] flex-col gap-3 rounded-xl border bg-card p-3 text-card-foreground">
           <header class="flex items-start justify-between gap-2">
             <h3 class="pt-1 text-sm font-semibold">{column.title}</h3>
             <div class="flex flex-wrap justify-end gap-1">
@@ -190,82 +220,115 @@
             Drag cards with mouse, or focus a card and press Space then arrow keys to move.
           </p>
 
-          <div
-            class="rounded border border-dashed border-border bg-muted/30 px-2 py-1.5 text-[11px] text-muted-foreground"
-            role="button"
-            tabindex="0"
-            aria-label={`Drop selected card into ${column.title}`}
-            ondragover={(event) => event.preventDefault()}
-            ondrop={(event) => handleColumnDrop(event, column.id)}
-            onkeydown={(event) => handleColumnDropZoneKeydown(event, column.id)}
-          >
-            {#if keyboardSelectedCardId}
-              Press Enter to drop selected card here
-            {:else}
-              Drop zone
-            {/if}
-          </div>
+          <div class="flex min-h-0 flex-1 flex-col gap-2">
+            <div
+              class={`rounded-lg border border-dashed px-2 py-1.5 text-[11px] transition-colors ${
+                activeDropColumnId === column.id
+                  ? 'border-primary bg-accent/60 text-foreground'
+                  : 'border-border bg-muted/30 text-muted-foreground'
+              }`}
+              role="button"
+              tabindex="0"
+              aria-label={`Drop selected card into ${column.title}`}
+              ondragover={(event) => {
+                event.preventDefault();
+                activeDropColumnId = column.id;
+              }}
+              ondragenter={() => (activeDropColumnId = column.id)}
+              ondragleave={() => {
+                if (activeDropColumnId === column.id) {
+                  activeDropColumnId = null;
+                }
+              }}
+              ondrop={(event) => handleColumnDrop(event, column.id)}
+              onkeydown={(event) => handleColumnDropZoneKeydown(event, column.id)}
+            >
+              {#if keyboardSelectedCardId}
+                Press Enter to drop selected card here
+              {:else if draggingCardId}
+                Release to move card to this column
+              {:else}
+                Drop zone
+              {/if}
+            </div>
 
-          <div class="grid gap-2" role="list" aria-label={`Cards in ${column.title}`}>
-            {#each cardsByColumn[column.id] ?? [] as card, index (card.id)}
-              <div
-                draggable="true"
-                class="rounded-md"
-                tabindex="0"
-                role="button"
-                aria-grabbed={keyboardSelectedCardId === card.id}
-                aria-label={`Card ${card.title}`}
-                ondragstart={(event) => startDrag(event, card)}
-                ondragover={(event) => event.preventDefault()}
-                ondrop={(event) => {
-                  event.preventDefault();
-                  const payload = readPayload(event);
-                  if (!payload || payload.cardId === card.id) {
-                    return;
-                  }
-                  onDropCard(payload.cardId, column.id, index);
-                }}
-                onkeydown={(event) => handleCardKeydown(event, card, column.id, index)}
-              >
-                <UiCard.Root size="sm" class="gap-2">
-                  <UiCard.Content class="space-y-2 px-3">
-                    <UiCard.Title class="flex items-center gap-1 text-xs">
-                      <GripVertical class="size-3 text-muted-foreground" />
-                      {card.title}
-                    </UiCard.Title>
-                    <UiCard.Description class="line-clamp-3 text-xs">
-                      {card.description || 'No description'}
-                    </UiCard.Description>
-                  </UiCard.Content>
-                  <div class="flex items-center justify-between gap-2 px-3 text-[11px] text-muted-foreground">
-                    <Badge
-                      variant={
-                        card.priority === 'urgent'
-                          ? 'destructive'
-                          : card.priority === 'high'
-                            ? 'secondary'
-                            : 'outline'
-                      }
-                    >
-                      {card.priority}
-                    </Badge>
-                    {#if card.dueDate}
-                      <span>Due {formatDate(card.dueDate)}</span>
-                    {/if}
-                  </div>
-                  <UiCard.Footer class="justify-end gap-1 px-3 pb-3">
-                    <Button type="button" size="icon-xs" variant="outline" onclick={() => onEditCard(card)}>
-                      <Pencil class="size-3.5" />
-                      <span class="sr-only">Edit</span>
-                    </Button>
-                    <Button type="button" size="icon-xs" variant="destructive" onclick={() => onDeleteCard(card)}>
-                      <Trash2 class="size-3.5" />
-                      <span class="sr-only">Delete</span>
-                    </Button>
-                  </UiCard.Footer>
-                </UiCard.Root>
-              </div>
-            {/each}
+            <div class="grid min-h-0 flex-1 auto-rows-min gap-2 overflow-y-auto pr-1" role="list" aria-label={`Cards in ${column.title}`}>
+              {#each cardsByColumn[column.id] ?? [] as card, index (card.id)}
+                <div
+                  draggable="true"
+                  class={`rounded-lg transition duration-200 ease-out ${
+                    draggingCardId === card.id ? 'scale-[0.98] opacity-45' : 'opacity-100'
+                  } ${
+                    activeDropCardId === card.id ? 'ring-2 ring-primary' : ''
+                  } ${
+                    recentlyDroppedCardId === card.id ? 'card-dropped' : ''
+                  }`}
+                  tabindex="0"
+                  role="button"
+                  aria-grabbed={keyboardSelectedCardId === card.id}
+                  aria-label={`Card ${card.title}`}
+                  ondragstart={(event) => startDrag(event, card)}
+                  ondragend={handleDragEnd}
+                  ondragover={(event) => event.preventDefault()}
+                  ondragenter={() => (activeDropCardId = card.id)}
+                  ondragleave={() => {
+                    if (activeDropCardId === card.id) {
+                      activeDropCardId = null;
+                    }
+                  }}
+                  ondrop={(event) => {
+                    event.preventDefault();
+                    const payload = readPayload(event);
+                    if (!payload || payload.cardId === card.id) {
+                      return;
+                    }
+                    onDropCard(payload.cardId, column.id, index);
+                    markCardDropped(payload.cardId);
+                    activeDropCardId = null;
+                    activeDropColumnId = null;
+                  }}
+                  onkeydown={(event) => handleCardKeydown(event, card, column.id, index)}
+                >
+                  <UiCard.Root size="sm" class="gap-2 rounded-lg transition-transform duration-200">
+                    <UiCard.Content class="space-y-2 px-3">
+                      <UiCard.Title class="flex items-center gap-1 text-xs">
+                        <GripVertical class="size-3 text-muted-foreground" />
+                        {card.title}
+                      </UiCard.Title>
+                      <UiCard.Description class="line-clamp-3 text-xs">
+                        {card.description || 'No description'}
+                      </UiCard.Description>
+                    </UiCard.Content>
+                    <div class="flex items-center justify-between gap-2 px-3 text-[11px] text-muted-foreground">
+                      <Badge
+                        variant={
+                          card.priority === 'urgent'
+                            ? 'destructive'
+                            : card.priority === 'high'
+                              ? 'secondary'
+                              : 'outline'
+                        }
+                      >
+                        {card.priority}
+                      </Badge>
+                      {#if card.dueDate}
+                        <span>Due {formatDate(card.dueDate)}</span>
+                      {/if}
+                    </div>
+                    <UiCard.Footer class="justify-end gap-1 px-3 pb-3">
+                      <Button type="button" size="icon-xs" variant="outline" onclick={() => onEditCard(card)}>
+                        <Pencil class="size-3.5" />
+                        <span class="sr-only">Edit</span>
+                      </Button>
+                      <Button type="button" size="icon-xs" variant="destructive" onclick={() => onDeleteCard(card)}>
+                        <Trash2 class="size-3.5" />
+                        <span class="sr-only">Delete</span>
+                      </Button>
+                    </UiCard.Footer>
+                  </UiCard.Root>
+                </div>
+              {/each}
+            </div>
           </div>
 
           <Button class="mt-1" type="button" variant="secondary" onclick={() => onAddCard(column.id)}>
@@ -275,10 +338,27 @@
         </section>
       {/each}
 
-      <Button type="button" variant="outline" class="h-10 w-[190px] border-dashed" onclick={onAddColumn}>
+      <Button type="button" variant="outline" class="h-10 w-[190px] self-start rounded-lg border-dashed" onclick={onAddColumn}>
         <Plus class="size-3.5" />
         Add Column
       </Button>
     </div>
   </div>
 {/if}
+
+<style>
+  .card-dropped {
+    animation: card-drop-in 220ms ease-out;
+  }
+
+  @keyframes card-drop-in {
+    0% {
+      transform: scale(0.97);
+      opacity: 0.65;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+</style>
