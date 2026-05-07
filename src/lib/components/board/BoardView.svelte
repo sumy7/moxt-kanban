@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import { ChevronLeft, ChevronRight, GripVertical, Pencil, Plus, Trash2 } from '@lucide/svelte';
   import { Badge } from '$lib/components/ui/badge/index.js';
   import { Button } from '$lib/components/ui/button/index.js';
@@ -52,6 +53,12 @@
       dropAnimationTimeout = null;
     }, 220);
   }
+
+  onDestroy(() => {
+    if (dropAnimationTimeout) {
+      clearTimeout(dropAnimationTimeout);
+    }
+  });
 
   function startDrag(event: DragEvent, card: KanbanCard): void {
     if (!event.dataTransfer) {
@@ -289,7 +296,7 @@
                   }}
                   onkeydown={(event) => handleCardKeydown(event, card, column.id, index)}
                 >
-                  <UiCard.Root size="sm" class="gap-2 rounded-lg transition-transform duration-200">
+                  <UiCard.Root size="sm" class="gap-2 rounded-lg">
                     <UiCard.Content class="space-y-2 px-3">
                       <UiCard.Title class="flex items-center gap-1 text-xs">
                         <GripVertical class="size-3 text-muted-foreground" />
