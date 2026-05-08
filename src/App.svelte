@@ -344,6 +344,55 @@
     };
   }
 
+  function buildOptimisticUpdatedCards(
+    cards: Card[],
+    cardId: string,
+    update: CardUpdate,
+  ): Card[] {
+    const current = cards.find((card) => card.id === cardId);
+    if (!current) {
+      throw new Error(`Card not found: ${cardId}`);
+    }
+
+    const now = new Date().toISOString();
+    const nextCard: Card = {
+      ...current,
+      title: update.title.trim(),
+      description: update.description.trim(),
+      priority: update.priority,
+      tags: update.tags,
+      dueDate: update.dueDate,
+      updatedAt: now,
+    };
+
+    if (current.columnId === update.columnId) {
+      return cards.map((card) => (card.id === cardId ? nextCard : card));
+    }
+
+    const remainingCards = cards.filter((card) => card.id !== cardId);
+    const sourceCards = remainingCards
+      .filter((card) => card.columnId === current.columnId && !card.deletedAt)
+      .sort((a, b) => a.order - b.order);
+    const sourceReordered = new Map(
+      sourceCards.map((card, index) => [
+        card.id,
+        { ...card, order: index + 1, updatedAt: now },
+      ]),
+    );
+    const targetMaxOrder = remainingCards
+      .filter((card) => card.columnId === update.columnId && !card.deletedAt)
+      .reduce((max, card) => Math.max(max, card.order), 0);
+
+    return [
+      ...remainingCards.map((card) => sourceReordered.get(card.id) ?? card),
+      {
+        ...nextCard,
+        columnId: update.columnId,
+        order: targetMaxOrder + 1,
+      },
+    ];
+  }
+
   async function submitCard(): Promise<void> {
     await safely(async () => {
       const tags = cardEditor.tagsText
@@ -361,8 +410,19 @@
           columnId: cardEditor.columnId,
         };
 
-        await cardService.update(cardEditor.editingCardId, update);
+        const snapshot = $cardsStore;
+        cardsStore.set(buildOptimisticUpdatedCards(snapshot, cardEditor.editingCardId, update));
+        cardEditor.open = false;
         notifySuccess('Card updated.');
+
+        try {
+          await cardService.update(cardEditor.editingCardId, update);
+        } catch (error) {
+          cardsStore.set(snapshot);
+          cardEditor.open = true;
+          throw error;
+        }
+        return;
       } else {
         const input: CardInput = {
           boardId: cardEditor.boardId,
