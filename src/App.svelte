@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import BoardView from './lib/components/board/BoardView.svelte';
   import ConfirmDialog from './lib/components/shared/ConfirmDialog.svelte';
   import DatePicker from './lib/components/shared/DatePicker.svelte';
@@ -22,6 +22,7 @@
   import { columnsStore } from './lib/stores/columns';
   import { defaultFilters, filtersStore } from './lib/stores/filters';
   import { toastStore } from './lib/stores/ui';
+  import { initSync, destroySync } from './lib/services/syncService';
   import type { Board, Card, CardFilters, CardPriority, Column, SortField } from './lib/types';
 
   type ConfirmState = {
@@ -118,11 +119,16 @@
     try {
       await seedIfNeeded();
       await reloadBoards(true);
+      initSync();
     } catch (error) {
       errorMessage = parseError(error);
     } finally {
       loading = false;
     }
+  });
+
+  onDestroy(() => {
+    destroySync();
   });
 
   async function reloadBoards(selectFirst = false): Promise<void> {

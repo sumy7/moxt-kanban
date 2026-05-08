@@ -40,9 +40,9 @@ async function getCardOrThrow(cardId: string): Promise<Card> {
 
 async function normalizeColumnOrder(columnId: string): Promise<void> {
   const now = nowIso();
-  const cards = (
-    await db.cards.where('columnId').equals(columnId).toArray()
-  ).sort((a, b) => a.order - b.order);
+  const cards = (await db.cards.where('columnId').equals(columnId).toArray())
+    .filter((c) => !c.deletedAt)
+    .sort((a, b) => a.order - b.order);
 
   await db.cards.bulkPut(
     cards.map((card, index) => ({
@@ -56,7 +56,12 @@ async function normalizeColumnOrder(columnId: string): Promise<void> {
 export const cardService = {
   async listByBoard(boardId: string): Promise<Card[]> {
     const cards = await db.cards.where('boardId').equals(boardId).toArray();
-    return cards.sort((a, b) => a.order - b.order);
+    return cards.filter((c) => !c.deletedAt).sort((a, b) => a.order - b.order);
+  },
+
+  async findUpdatedSince(boardId: string, since: string): Promise<Card[]> {
+    const all = await db.cards.where('boardId').equals(boardId).toArray();
+    return all.filter((c) => c.updatedAt > since);
   },
 
   async create(input: CardInput): Promise<Card> {
@@ -65,7 +70,9 @@ export const cardService = {
     const maxOrder =
       (
         await db.cards.where('columnId').equals(input.columnId).sortBy('order')
-      ).at(-1)?.order ?? 0;
+      )
+        .filter((c) => !c.deletedAt)
+        .at(-1)?.order ?? 0;
 
     const card: Card = {
       id: createId('card'),
@@ -79,6 +86,7 @@ export const cardService = {
       dueDate: input.dueDate ?? null,
       createdAt: now,
       updatedAt: now,
+      deletedAt: null,
     };
 
     await db.cards.add(card);
@@ -99,7 +107,9 @@ export const cardService = {
             .where('columnId')
             .equals(update.columnId)
             .sortBy('order')
-        ).at(-1)?.order ?? 0;
+        )
+          .filter((c) => !c.deletedAt)
+          .at(-1)?.order ?? 0;
 
       await db.transaction('rw', db.cards, async () => {
         await db.cards.update(cardId, {
@@ -130,9 +140,10 @@ export const cardService = {
 
   async remove(cardId: string): Promise<void> {
     const card = await getCardOrThrow(cardId);
+    const now = nowIso();
 
     await db.transaction('rw', db.cards, async () => {
-      await db.cards.delete(cardId);
+      await db.cards.update(cardId, { deletedAt: now, updatedAt: now });
       await normalizeColumnOrder(card.columnId);
     });
   },
@@ -147,10 +158,14 @@ export const cardService = {
     await db.transaction('rw', db.cards, async () => {
       const sourceCards = (
         await db.cards.where('columnId').equals(card.columnId).toArray()
-      ).sort((a, b) => a.order - b.order);
+      )
+        .filter((c) => !c.deletedAt)
+        .sort((a, b) => a.order - b.order);
       const targetCards = (
         await db.cards.where('columnId').equals(toColumnId).toArray()
-      ).sort((a, b) => a.order - b.order);
+      )
+        .filter((c) => !c.deletedAt)
+        .sort((a, b) => a.order - b.order);
 
       const sourceWithoutMoving = sourceCards.filter(
         (item) => item.id !== cardId,

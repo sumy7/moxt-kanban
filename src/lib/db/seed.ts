@@ -1,11 +1,12 @@
-import { db } from './database';
 import { createId } from '../utils/id';
 import { nowIso } from '../utils/date';
 import type { Board, Column } from '../types';
+import { db } from './database';
+import { boardService } from '../services/boardService';
 
 export async function seedIfNeeded(): Promise<void> {
-  const count = await db.boards.count();
-  if (count > 0) {
+  const boards = await boardService.list();
+  if (boards.length > 0) {
     return;
   }
 
@@ -15,6 +16,7 @@ export async function seedIfNeeded(): Promise<void> {
     name: 'My First Board',
     createdAt: now,
     updatedAt: now,
+    deletedAt: null,
   };
 
   const columns: Column[] = [
@@ -25,6 +27,7 @@ export async function seedIfNeeded(): Promise<void> {
       order: 1,
       createdAt: now,
       updatedAt: now,
+      deletedAt: null,
     },
     {
       id: createId('col'),
@@ -33,6 +36,7 @@ export async function seedIfNeeded(): Promise<void> {
       order: 2,
       createdAt: now,
       updatedAt: now,
+      deletedAt: null,
     },
     {
       id: createId('col'),
@@ -41,6 +45,7 @@ export async function seedIfNeeded(): Promise<void> {
       order: 3,
       createdAt: now,
       updatedAt: now,
+      deletedAt: null,
     },
   ];
 
