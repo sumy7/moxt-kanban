@@ -2,7 +2,7 @@ import { get } from 'svelte/store';
 import { activeBoardIdStore, boardsStore } from '../stores/boards';
 import { columnsStore } from '../stores/columns';
 import { cardsStore } from '../stores/cards';
-import type { Board, Card, Column } from '../types';
+import type { Board } from '../types';
 import { boardService } from './boardService';
 import { cardService } from './cardService';
 import { columnService } from './columnService';
@@ -119,13 +119,13 @@ async function performIncrementalSync(): Promise<void> {
 
     if (updatedColumns.length > 0) {
       columnsStore.update((current) =>
-        mergeOrdered(current, updatedColumns as (Column & { order: number })[]),
+        mergeOrdered(current, updatedColumns),
       );
     }
 
     if (updatedCards.length > 0) {
       cardsStore.update((current) =>
-        mergeOrdered(current, updatedCards as (Card & { order: number })[]),
+        mergeOrdered(current, updatedCards),
       );
     }
   }
