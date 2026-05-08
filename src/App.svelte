@@ -14,7 +14,12 @@
   import { db } from './lib/db/database';
   import { seedIfNeeded } from './lib/db/seed';
   import { boardService } from './lib/services/boardService';
-  import { cardService, type CardInput, type CardUpdate } from './lib/services/cardService';
+  import {
+    cardService,
+    normalizeCardUpdate,
+    type CardInput,
+    type CardUpdate,
+  } from './lib/services/cardService';
   import { columnService } from './lib/services/columnService';
   import { filterAndSortCards } from './lib/services/filterService';
   import { activeBoardIdStore, boardsStore } from './lib/stores/boards';
@@ -22,6 +27,7 @@
   import { columnsStore } from './lib/stores/columns';
   import { defaultFilters, filtersStore } from './lib/stores/filters';
   import { toastStore } from './lib/stores/ui';
+  import { nowIso } from './lib/utils/date';
   import { initSync, destroySync } from './lib/services/syncService';
   import type { Board, Card, CardFilters, CardPriority, Column, SortField } from './lib/types';
 
@@ -354,18 +360,19 @@
       throw new Error(`Card not found: ${cardId}`);
     }
 
-    const now = new Date().toISOString();
+    const normalized = normalizeCardUpdate(update);
+    const now = nowIso();
     const nextCard: Card = {
       ...current,
-      title: update.title.trim(),
-      description: update.description.trim(),
-      priority: update.priority,
-      tags: update.tags,
-      dueDate: update.dueDate,
+      title: normalized.title,
+      description: normalized.description,
+      priority: normalized.priority,
+      tags: normalized.tags,
+      dueDate: normalized.dueDate,
       updatedAt: now,
     };
 
-    if (current.columnId === update.columnId) {
+    if (current.columnId === normalized.columnId) {
       return cards.map((card) => (card.id === cardId ? nextCard : card));
     }
 
@@ -380,14 +387,14 @@
       ]),
     );
     const targetMaxOrder = remainingCards
-      .filter((card) => card.columnId === update.columnId && !card.deletedAt)
+      .filter((card) => card.columnId === normalized.columnId && !card.deletedAt)
       .reduce((max, card) => Math.max(max, card.order), 0);
 
     return [
       ...remainingCards.map((card) => sourceReordered.get(card.id) ?? card),
       {
         ...nextCard,
-        columnId: update.columnId,
+        columnId: normalized.columnId,
         order: targetMaxOrder + 1,
       },
     ];
@@ -422,7 +429,6 @@
           cardEditor.open = true;
           throw error;
         }
-        return;
       } else {
         const input: CardInput = {
           boardId: cardEditor.boardId,
