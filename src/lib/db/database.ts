@@ -49,6 +49,14 @@ type DbOrderByClause<T extends Entity> = {
   toArray(): Promise<T[]>;
 };
 
+type DbRangeResult<T extends Entity> = {
+  toArray(): Promise<T[]>;
+};
+
+type DbCompoundWhereClause<T extends Entity> = {
+  between(lower: unknown[], upper: unknown[]): DbRangeResult<T>;
+};
+
 export type DbTable<T extends Entity> = {
   add(item: T): Promise<string>;
   bulkAdd(items: T[]): Promise<void>;
@@ -59,6 +67,8 @@ export type DbTable<T extends Entity> = {
   orderBy<K extends keyof T>(field: K): DbOrderByClause<T>;
   update(id: string, changes: Partial<T>): Promise<number>;
   where<K extends keyof T>(field: K): DbWhereClause<T>;
+  /** Compound index query — `field` must be a compound index key like `'[boardId+updatedAt]'`. */
+  whereCompound(field: string): DbCompoundWhereClause<T>;
 };
 
 type DbAdapter = {
@@ -182,6 +192,23 @@ class DexieTableAdapter<T extends Entity> implements DbTable<T> {
           delete: () => collection.delete(),
         };
       },
+    };
+  }
+
+  whereCompound(field: string): DbCompoundWhereClause<T> {
+    return {
+      between: (lower: unknown[], upper: unknown[]) => ({
+        toArray: () =>
+          this.tableRef
+            .where(field)
+            .between(
+              lower as IndexableType,
+              upper as IndexableType,
+              true,
+              true,
+            )
+            .toArray(),
+      }),
     };
   }
 }
@@ -347,6 +374,29 @@ class MoxtTableAdapter<T extends Entity> implements DbTable<T> {
       },
     };
   }
+
+  whereCompound(field: string): DbCompoundWhereClause<T> {
+    // The Moxt collection API does not support compound index range queries;
+    // fall back to parsing the field name and filtering in memory.
+    const parts = field.replace(/^\[|\]$/g, '').split('+');
+    return {
+      between: (lower: unknown[], upper: unknown[]) => ({
+        toArray: async () => {
+          const rows = await this.collection.find({} as Query<T>);
+          return rows.filter((row) => {
+            const rec = row as Record<string, unknown>;
+            for (let i = 0; i < parts.length; i++) {
+              const v = String(rec[parts[i]]);
+              const lo = String(lower[i]);
+              const hi = String(upper[i]);
+              if (v < lo || v > hi) return false;
+            }
+            return true;
+          });
+        },
+      }),
+    };
+  }
 }
 
 class MoxtAdapter implements DbAdapter {
@@ -422,6 +472,10 @@ class TableFacade<K extends TableName> implements DbTable<TableMap[K]> {
     field: Field,
   ): DbWhereClause<TableMap[K]> {
     return this.table.where(field);
+  }
+
+  whereCompound(field: string): DbCompoundWhereClause<TableMap[K]> {
+    return this.table.whereCompound(field);
   }
 }
 

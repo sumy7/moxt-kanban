@@ -188,7 +188,7 @@ async function triggerSync(): Promise<void> {
     return syncInFlight;
   }
 
-  const promise = (async () => {
+  syncInFlight = (async () => {
     if (needsFullSync()) {
       await performFullSync();
     } else {
@@ -198,8 +198,7 @@ async function triggerSync(): Promise<void> {
     syncInFlight = null;
   });
 
-  syncInFlight = promise;
-  return promise;
+  return syncInFlight;
 }
 
 // ── Event listeners ────────────────────────────────────────────────────────

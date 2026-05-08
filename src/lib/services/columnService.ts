@@ -20,8 +20,10 @@ export const columnService = {
   },
 
   async findUpdatedSince(boardId: string, since: string): Promise<Column[]> {
-    const all = await db.columns.where('boardId').equals(boardId).toArray();
-    return all.filter((c) => c.updatedAt >= since);
+    return db.columns
+      .whereCompound('[boardId+updatedAt]')
+      .between([boardId, since], [boardId, '\uffff'])
+      .toArray();
   },
 
   async create(boardId: string, title: string): Promise<Column> {
