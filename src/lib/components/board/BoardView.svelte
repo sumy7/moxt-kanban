@@ -80,12 +80,16 @@
     activeDropIndex = index;
   }
 
-  function dropToColumn(event: DragEvent, columnId: string): void {
+  function dropToColumn(event: DragEvent, columnId: string, overCardId?: string): void {
     event.preventDefault();
     event.stopPropagation();
 
     const payload = readPayload(event);
     if (!payload) {
+      return;
+    }
+    if (overCardId && payload.cardId === overCardId) {
+      handleDragEnd();
       return;
     }
 
@@ -140,7 +144,7 @@
 
           <div
             class="grid min-h-0 flex-1 auto-rows-min gap-2 overflow-y-auto"
-            role="region"
+            role="list"
             aria-label={`Cards in ${column.title}`}
             ondragover={(event) => setDropPosition(event, column.id, columnCards.length)}
             ondrop={(event) => dropToColumn(event, column.id)}
@@ -160,7 +164,7 @@
                 ondragend={handleDragEnd}
                 ondragenter={(event) => setDropPosition(event, column.id, index)}
                 ondragover={(event) => setDropPosition(event, column.id, index)}
-                ondrop={(event) => dropToColumn(event, column.id)}
+                ondrop={(event) => dropToColumn(event, column.id, card.id)}
               >
                 <UiCard.Root size="sm" class="gap-2 rounded-none border">
                   <UiCard.Content class="space-y-2 px-3">

@@ -1,10 +1,10 @@
 # AGENTS.md
 
-**Kanban system**: A local-first Kanban application built with SvelteKit, TypeScript, IndexedDB (Dexie), and Tailwind CSS. The application must support Board View and Table View for task management, with full drag-and-drop support, persistence, and filtering/search capabilities.
+**Kanban system**: A local-first Kanban application built with Svelte 5, Rsbuild, TypeScript, IndexedDB (Dexie), and Tailwind CSS. The application must support Board View and Table View for task management, with full drag-and-drop support, persistence, and filtering/search capabilities.
 
 ## Project Overview
 
-**Tech Stack**: SvelteKit, TypeScript, Dexie (IndexedDB), shadcn-svelte, Tailwind CSS, Rsbuild
+**Tech Stack**: Svelte 5, TypeScript, Dexie (IndexedDB), shadcn-svelte, Tailwind CSS, Rsbuild
 
 **Execution Plan**: See [kanban-system-execution-plan.md](./kanban-system-execution-plan.md) for complete product requirements, data models, acceptance criteria, and 8-milestone development roadmap.
 
@@ -23,7 +23,7 @@ src/
     stores/         # Svelte stores (state management)
     types/          # TypeScript type definitions
     utils/          # Helper functions
-  routes/           # SvelteKit pages
+  App.svelte        # Single app entry rendered by Rsbuild
 ```
 
 ### Core Principles

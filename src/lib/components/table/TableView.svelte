@@ -5,7 +5,6 @@
   import type { Card, Column, SortDirection, SortField } from '../../types';
   import EmptyState from '../shared/EmptyState.svelte';
   import { formatDate } from '../../utils/date';
-  import { writable } from 'svelte/store';
 
   type Props = {
     cards: Card[];
@@ -21,87 +20,6 @@
     $props();
 
   const columnMap = $derived(new Map(columns.map((column) => [column.id, column.title])));
-
-  // 排序状态
-  const sorting = writable<{ id: string; desc: boolean }[]>([
-    {
-      id: sortField,
-      desc: sortDirection === 'desc',
-    },
-  ]);
-
-  let currentSorting: { id: string; desc: boolean }[] = [];
-  sorting.subscribe((value) => {
-    currentSorting = value;
-  });
-
-  // 监听外部排序变化
-  $effect(() => {
-    sorting.set([
-      {
-        id: sortField,
-        desc: sortDirection === 'desc',
-      },
-    ]);
-  });
-
-  // 排序数据
-  const sortedCards = $derived.by(() => {
-    const sorted = [...cards];
-    if (currentSorting.length > 0) {
-      const { id, desc } = currentSorting[0];
-      sorted.sort((a, b) => {
-        let aVal: string | number;
-        let bVal: string | number;
-
-        switch (id) {
-          case 'title':
-            aVal = a.title;
-            bVal = b.title;
-            break;
-          case 'column':
-            aVal = a.columnId;
-            bVal = b.columnId;
-            break;
-          case 'priority':
-            aVal = a.priority;
-            bVal = b.priority;
-            break;
-          case 'tags':
-            aVal = (a.tags ?? []).join(', ');
-            bVal = (b.tags ?? []).join(', ');
-            break;
-          case 'dueDate':
-            aVal = a.dueDate || '';
-            bVal = b.dueDate || '';
-            break;
-          case 'updatedAt':
-            aVal = a.updatedAt;
-            bVal = b.updatedAt;
-            break;
-          case 'createdAt':
-            aVal = a.createdAt;
-            bVal = b.createdAt;
-            break;
-          default:
-            return 0;
-        }
-
-        if (aVal < bVal) return desc ? 1 : -1;
-        if (aVal > bVal) return desc ? -1 : 1;
-        return 0;
-      });
-    }
-    return sorted;
-  });
-
-  // 构建行数据，每行包含 id 和 original
-  const rows = $derived.by(() =>
-    sortedCards.map((card, idx) => ({
-      id: card.id || `row-${idx}`,
-      original: card,
-    }))
-  );
 
   // 列定义
   interface ColumnHeader {
@@ -121,21 +39,15 @@
   ];
 
   function handleColumnSort(colId: string): void {
-    const isCurrentColumn = currentSorting[0]?.id === colId;
-    const desc = isCurrentColumn ? !currentSorting[0].desc : false;
-    sorting.set([
-      {
-        id: colId,
-        desc: desc,
-      },
-    ]);
     onSort(colId as SortField);
   }
 
   function getSortIndicator(colId: string): string {
-    const s = currentSorting[0];
-    if (s?.id !== colId) return '';
-    return s.desc ? '↓' : '↑';
+    if (sortField !== colId) {
+      return '';
+    }
+
+    return sortDirection === 'desc' ? '↓' : '↑';
   }
 </script>
 
@@ -163,46 +75,46 @@
         </Table.Row>
       </Table.Header>
       <Table.Body>
-        {#each rows as row (row.id)}
+        {#each cards as card (card.id)}
           <Table.Row>
             <Table.Cell class="max-w-xs">
-              <div class="font-medium">{row.original.title}</div>
+              <div class="font-medium">{card.title}</div>
               <div class="mt-1 text-xs text-muted-foreground">
-                {row.original.description || 'No description'}
+                {card.description || 'No description'}
               </div>
             </Table.Cell>
             <Table.Cell>
-              {columnMap.get(row.original.columnId) ?? 'Unknown'}
+              {columnMap.get(card.columnId) ?? 'Unknown'}
             </Table.Cell>
             <Table.Cell>
               <Badge
                 variant={
-                  row.original.priority === 'urgent'
+                  card.priority === 'urgent'
                     ? 'destructive'
-                    : row.original.priority === 'high'
+                    : card.priority === 'high'
                       ? 'secondary'
                       : 'outline'
                 }
               >
-                {row.original.priority}
+                {card.priority}
               </Badge>
             </Table.Cell>
             <Table.Cell>
-              {(row.original.tags ?? []).join(', ') || '-'}
+              {(card.tags ?? []).join(', ') || '-'}
             </Table.Cell>
             <Table.Cell>
-              {formatDate(row.original.dueDate)}
+              {formatDate(card.dueDate)}
             </Table.Cell>
             <Table.Cell>
-              {formatDate(row.original.updatedAt)}
+              {formatDate(card.updatedAt)}
             </Table.Cell>
             <Table.Cell>
-              {formatDate(row.original.createdAt)}
+              {formatDate(card.createdAt)}
             </Table.Cell>
             <Table.Cell class="w-24">
               <div class="flex gap-1">
-                <Button type="button" size="xs" variant="outline" onclick={() => onEditCard(row.original)}>Edit</Button>
-                <Button type="button" size="xs" variant="destructive" onclick={() => onDeleteCard(row.original)}>Delete</Button>
+                <Button type="button" size="xs" variant="outline" onclick={() => onEditCard(card)}>Edit</Button>
+                <Button type="button" size="xs" variant="destructive" onclick={() => onDeleteCard(card)}>Delete</Button>
               </div>
             </Table.Cell>
           </Table.Row>
