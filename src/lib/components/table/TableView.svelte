@@ -5,13 +5,6 @@
   import type { Card, Column, SortDirection, SortField } from '../../types';
   import EmptyState from '../shared/EmptyState.svelte';
   import { formatDate } from '../../utils/date';
-  import {
-    createColumnHelper,
-    getCoreRowModel,
-    getSortedRowModel,
-    type ColumnDef,
-    type SortingState,
-  } from '@tanstack/table-core';
   import { writable } from 'svelte/store';
 
   type Props = {
@@ -29,47 +22,15 @@
 
   const columnMap = $derived(new Map(columns.map((column) => [column.id, column.title])));
 
-  const columnHelper = createColumnHelper<Card>();
-
-  const columnDefs: ColumnDef<Card>[] = [
-    columnHelper.accessor('title', {
-      header: 'Title',
-    }),
-    columnHelper.accessor('columnId', {
-      id: 'column',
-      header: 'Status',
-      cell: (info) => columnMap.get(info.getValue()) ?? 'Unknown',
-    }),
-    columnHelper.accessor('priority', {
-      header: 'Priority',
-    }),
-    columnHelper.accessor('tags', {
-      header: 'Tags',
-      cell: (info) => (info.getValue() ?? []).join(', ') || '-',
-    }),
-    columnHelper.accessor('dueDate', {
-      header: 'Due Date',
-      cell: (info) => formatDate(info.getValue()),
-    }),
-    columnHelper.accessor('updatedAt', {
-      header: 'Updated',
-      cell: (info) => formatDate(info.getValue()),
-    }),
-    columnHelper.accessor('createdAt', {
-      header: 'Created',
-      cell: (info) => formatDate(info.getValue()),
-    }),
-  ];
-
-  // 初始化排序状态
-  const sorting = writable<SortingState>([
+  // 排序状态
+  const sorting = writable<{ id: string; desc: boolean }[]>([
     {
       id: sortField,
       desc: sortDirection === 'desc',
     },
   ]);
 
-  let currentSorting: SortingState = [];
+  let currentSorting: { id: string; desc: boolean }[] = [];
   sorting.subscribe((value) => {
     currentSorting = value;
   });
@@ -84,76 +45,92 @@
     ]);
   });
 
-  // 创建排序处理函数
-  const handleSorting = (updater: SortingState | ((old: SortingState) => SortingState)) => {
-    const newSorting = typeof updater === 'function' ? updater(currentSorting) : updater;
-    sorting.set(newSorting);
-    if (newSorting.length > 0) {
-      onSort(newSorting[0].id as SortField);
+  // 排序数据
+  const sortedCards = $derived.by(() => {
+    const sorted = [...cards];
+    if (currentSorting.length > 0) {
+      const { id, desc } = currentSorting[0];
+      sorted.sort((a, b) => {
+        let aVal: string | number;
+        let bVal: string | number;
+
+        switch (id) {
+          case 'title':
+            aVal = a.title;
+            bVal = b.title;
+            break;
+          case 'column':
+            aVal = a.columnId;
+            bVal = b.columnId;
+            break;
+          case 'priority':
+            aVal = a.priority;
+            bVal = b.priority;
+            break;
+          case 'tags':
+            aVal = (a.tags ?? []).join(', ');
+            bVal = (b.tags ?? []).join(', ');
+            break;
+          case 'dueDate':
+            aVal = a.dueDate || '';
+            bVal = b.dueDate || '';
+            break;
+          case 'updatedAt':
+            aVal = a.updatedAt;
+            bVal = b.updatedAt;
+            break;
+          case 'createdAt':
+            aVal = a.createdAt;
+            bVal = b.createdAt;
+            break;
+          default:
+            return 0;
+        }
+
+        if (aVal < bVal) return desc ? 1 : -1;
+        if (aVal > bVal) return desc ? -1 : 1;
+        return 0;
+      });
     }
-  };
-
-  // 创建表格实例
-  const table = $derived.by(() => {
-    const instance = {
-      data: cards,
-      columns: columnDefs,
-      state: {
-        sorting: currentSorting,
-      },
-      onSortingChange: handleSorting,
-      getCoreRowModel: getCoreRowModel(),
-      getSortedRowModel: getSortedRowModel(),
-    };
-
-    // 获取行
-    const sortedRowModel = getSortedRowModel<Card>()(instance);
-    const rows = sortedRowModel.rows;
-
-    // 创建表头
-    const headerGroups = [
-      {
-        id: 'header',
-        headers: columnDefs.map((col, idx) => {
-          const colId = col.id || `col-${idx}`;
-          const isSorted = currentSorting[0]?.id === colId;
-
-          return {
-            id: colId,
-            column: {
-              columnDef: col,
-              getIsSorted: () =>
-                isSorted ? (currentSorting[0].desc ? 'desc' : 'asc') : false,
-              toggleSorting: () => {
-                const isCurrentColumn = isSorted;
-                const desc = isCurrentColumn ? !currentSorting[0].desc : false;
-                sorting.set([
-                  {
-                    id: colId,
-                    desc: desc,
-                  },
-                ]);
-                onSort(colId as SortField);
-              },
-            },
-            isPlaceholder: false,
-            renderHeader: () =>
-              typeof col.header === 'string' ? col.header : '',
-          };
-        }),
-      },
-    ];
-
-    return {
-      getHeaderGroups: () => headerGroups,
-      getRowModel: () => ({
-        rows: rows,
-      }),
-    };
+    return sorted;
   });
 
-  const headerGroups = $derived(table.getHeaderGroups());
-  const rows = $derived(table.getRowModel().rows);
+  // 构建行数据，每行包含 id 和 original
+  const rows = $derived.by(() =>
+    sortedCards.map((card, idx) => ({
+      id: card.id || `row-${idx}`,
+      original: card,
+    }))
+  );
+
+  // 列定义
+  interface ColumnHeader {
+    id: string;
+    label: string;
+    sortable: boolean;
+  }
+
+  const columnHeaders: ColumnHeader[] = [
+    { id: 'title', label: 'Title', sortable: true },
+    { id: 'column', label: 'Status', sortable: true },
+    { id: 'priority', label: 'Priority', sortable: true },
+    { id: 'tags', label: 'Tags', sortable: false },
+    { id: 'dueDate', label: 'Due Date', sortable: true },
+    { id: 'updatedAt', label: 'Updated', sortable: true },
+    { id: 'createdAt', label: 'Created', sortable: true },
+  ];
+
+  function handleColumnSort(colId: string): void {
+    const isCurrentColumn = currentSorting[0]?.id === colId;
+    const desc = isCurrentColumn ? !currentSorting[0].desc : false;
+    sorting.set([
+      {
+        id: colId,
+        desc: desc,
+      },
+    ]);
+    onSort(colId as SortField);
+  }
 
   function getSortIndicator(colId: string): string {
     const s = currentSorting[0];
@@ -168,24 +145,22 @@
   <div class="table-wrap">
     <Table.Root class="w-full border bg-card">
       <Table.Header>
-        {#each headerGroups as headerGroup (headerGroup.id)}
-          <Table.Row>
-            {#each headerGroup.headers as header (header.id)}
-              <Table.Head
-                class="cursor-pointer select-none hover:bg-muted/50"
-                onclick={() => header.column.toggleSorting()}
-              >
-                <div class="flex items-center gap-1">
-                  <span>{header.renderHeader()}</span>
-                  {#if getSortIndicator(header.id)}
-                    <span class="text-xs">{getSortIndicator(header.id)}</span>
-                  {/if}
-                </div>
-              </Table.Head>
-            {/each}
-            <Table.Head class="w-24">Actions</Table.Head>
-          </Table.Row>
-        {/each}
+        <Table.Row>
+          {#each columnHeaders as header (header.id)}
+            <Table.Head
+              class={header.sortable ? 'cursor-pointer select-none hover:bg-muted/50' : ''}
+              onclick={() => header.sortable && handleColumnSort(header.id)}
+            >
+              <div class="flex items-center gap-1">
+                <span>{header.label}</span>
+                {#if header.sortable && getSortIndicator(header.id)}
+                  <span class="text-xs">{getSortIndicator(header.id)}</span>
+                {/if}
+              </div>
+            </Table.Head>
+          {/each}
+          <Table.Head class="w-24">Actions</Table.Head>
+        </Table.Row>
       </Table.Header>
       <Table.Body>
         {#each rows as row (row.id)}
