@@ -1,7 +1,9 @@
+import { get } from 'svelte/store';
 import { toastStore } from '../stores/ui';
 
 export function createNotifications() {
   let errorMessage = $state('');
+  let successToastTimer: ReturnType<typeof setTimeout> | null = null;
 
   function parseError(error: unknown): string {
     if (error instanceof Error) return error.message;
@@ -9,11 +11,27 @@ export function createNotifications() {
   }
 
   function notifySuccess(message: string): void {
+    if (successToastTimer) {
+      clearTimeout(successToastTimer);
+      successToastTimer = null;
+    }
+
     toastStore.set({ type: 'success', message });
-    setTimeout(() => toastStore.set(null), 2200);
+
+    successToastTimer = setTimeout(() => {
+      const currentToast = get(toastStore);
+      if (currentToast?.type === 'success' && currentToast.message === message) {
+        toastStore.set(null);
+      }
+      successToastTimer = null;
+    }, 2200);
   }
 
   function notifyError(message: string): void {
+    if (successToastTimer) {
+      clearTimeout(successToastTimer);
+      successToastTimer = null;
+    }
     toastStore.set({ type: 'error', message });
   }
 

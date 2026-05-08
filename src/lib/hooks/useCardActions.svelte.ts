@@ -119,6 +119,7 @@ export function createCardActions({
 
   async function submit(): Promise<void> {
     await safely(async () => {
+      let shouldReloadBoardData = false;
       const tags = editor.tagsText
         .split(',')
         .map((t) => t.trim())
@@ -134,9 +135,12 @@ export function createCardActions({
           columnId: editor.columnId,
         };
 
-        const snapshot = get(cardsStore);
         cardsStore.set(
-          buildOptimisticUpdatedCards(snapshot, editor.editingCardId, update),
+          buildOptimisticUpdatedCards(
+            get(cardsStore),
+            editor.editingCardId,
+            update,
+          ),
         );
         editor.open = false;
 
@@ -144,7 +148,10 @@ export function createCardActions({
           await cardService.update(editor.editingCardId, update);
           notifySuccess('Card updated.');
         } catch (error) {
-          cardsStore.set(snapshot);
+          const boardId = get(activeBoardIdStore);
+          if (boardId) {
+            await loadBoardData(boardId);
+          }
           editor.open = true;
           throw error;
         }
@@ -159,12 +166,15 @@ export function createCardActions({
           dueDate: editor.dueDate || null,
         };
         await cardService.create(input);
+        shouldReloadBoardData = true;
         notifySuccess('Card created.');
       }
 
       editor.open = false;
-      const boardId = get(activeBoardIdStore);
-      if (boardId) await loadBoardData(boardId);
+      if (shouldReloadBoardData) {
+        const boardId = get(activeBoardIdStore);
+        if (boardId) await loadBoardData(boardId);
+      }
     });
   }
 
