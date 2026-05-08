@@ -5,4 +5,5 @@ export type Column = {
   order: number;
   createdAt: string;
   updatedAt: string;
+  deletedAt: string | null;
 };

@@ -12,4 +12,5 @@ export type Card = {
   dueDate: string | null;
   createdAt: string;
   updatedAt: string;
+  deletedAt: string | null;
 };

@@ -23,6 +23,10 @@ type MoxtCollection<T extends { id: string }> = {
 
 type MoxtApi = {
   collection<T extends { id: string }>(name: string): MoxtCollection<T>;
+  on?(
+    event: 'data:change',
+    callback: (payload: { path: string }) => void | Promise<void>,
+  ): () => void;
 };
 
 type DbWhereEquals<T extends Entity> = {
@@ -33,6 +37,7 @@ type DbWhereEquals<T extends Entity> = {
 
 type DbWhereClause<T extends Entity> = {
   equals(value: unknown): DbWhereEquals<T>;
+  aboveOrEqual(value: unknown): DbWhereEquals<T>;
 };
 
 type DbOrderByArray<T extends Entity> = {
@@ -42,6 +47,14 @@ type DbOrderByArray<T extends Entity> = {
 type DbOrderByClause<T extends Entity> = {
   reverse(): DbOrderByArray<T>;
   toArray(): Promise<T[]>;
+};
+
+type DbRangeResult<T extends Entity> = {
+  toArray(): Promise<T[]>;
+};
+
+type DbCompoundWhereClause<T extends Entity> = {
+  between(lower: unknown[], upper: unknown[]): DbRangeResult<T>;
 };
 
 export type DbTable<T extends Entity> = {
@@ -54,6 +67,8 @@ export type DbTable<T extends Entity> = {
   orderBy<K extends keyof T>(field: K): DbOrderByClause<T>;
   update(id: string, changes: Partial<T>): Promise<number>;
   where<K extends keyof T>(field: K): DbWhereClause<T>;
+  /** Compound index query — `field` must be a compound index key like `'[boardId+updatedAt]'`. */
+  whereCompound(field: string): DbCompoundWhereClause<T>;
 };
 
 type DbAdapter = {
@@ -79,6 +94,34 @@ class DexieDatabase extends Dexie {
       columns: 'id, boardId, [boardId+order], createdAt, updatedAt',
       cards:
         'id, boardId, columnId, [columnId+order], dueDate, priority, createdAt, updatedAt',
+    });
+
+    this.version(2)
+      .stores({
+        boards: 'id, name, deletedAt, createdAt, updatedAt',
+        columns:
+          'id, boardId, [boardId+order], deletedAt, createdAt, updatedAt',
+        cards:
+          'id, boardId, columnId, [columnId+order], dueDate, priority, deletedAt, createdAt, updatedAt',
+      })
+      .upgrade((tx) => {
+        return Promise.all([
+          tx.table('boards').toCollection().modify({ deletedAt: null }),
+          tx.table('columns').toCollection().modify({ deletedAt: null }),
+          tx.table('cards').toCollection().modify({ deletedAt: null }),
+        ]);
+      });
+
+    // v3: add compound [boardId+updatedAt] index to columns and cards for
+    // efficient incremental-sync range queries. No upgrade callback is needed:
+    // Dexie automatically rebuilds indexes for existing records when only
+    // index definitions change without schema alterations.
+    this.version(3).stores({
+      boards: 'id, name, deletedAt, createdAt, updatedAt',
+      columns:
+        'id, boardId, [boardId+order], [boardId+updatedAt], deletedAt, createdAt, updatedAt',
+      cards:
+        'id, boardId, columnId, [columnId+order], [boardId+updatedAt], dueDate, priority, deletedAt, createdAt, updatedAt',
     });
   }
 }
@@ -139,6 +182,35 @@ class DexieTableAdapter<T extends Entity> implements DbTable<T> {
           delete: () => collection.delete(),
         };
       },
+      aboveOrEqual: (value: unknown) => {
+        const collection = this.tableRef
+          .where(field as string)
+          .aboveOrEqual(value as IndexableType);
+
+        return {
+          toArray: () => collection.toArray(),
+          sortBy: <S extends keyof T>(sortField: S) =>
+            collection.sortBy(sortField as string),
+          delete: () => collection.delete(),
+        };
+      },
+    };
+  }
+
+  whereCompound(field: string): DbCompoundWhereClause<T> {
+    return {
+      between: (lower: unknown[], upper: unknown[]) => ({
+        toArray: () =>
+          this.tableRef
+            .where(field)
+            .between(
+              lower as IndexableType,
+              upper as IndexableType,
+              true,
+              true,
+            )
+            .toArray(),
+      }),
     };
   }
 }
@@ -269,6 +341,62 @@ class MoxtTableAdapter<T extends Entity> implements DbTable<T> {
           },
         };
       },
+      aboveOrEqual: (value: unknown) => {
+        const fieldKey = field as string;
+        const compareVal = String(value);
+
+        const filterGte = (rows: T[]) =>
+          rows.filter(
+            (row) =>
+              String((row as Record<string, unknown>)[fieldKey]) >= compareVal,
+          );
+
+        return {
+          toArray: async () => {
+            const rows = await this.collection.find({} as Query<T>);
+            return filterGte(rows);
+          },
+          sortBy: async <S extends keyof T>(sortField: S) => {
+            const rows = await this.collection.find({} as Query<T>, {
+              sort: { [sortField]: 1 } as Sort<T>,
+            });
+            return filterGte(rows);
+          },
+          delete: async () => {
+            const rows = await this.collection.find({} as Query<T>);
+            const toDelete = filterGte(rows);
+            await Promise.all(
+              toDelete.map((row) =>
+                this.collection.deleteOne({ id: row.id } as Query<T>),
+              ),
+            );
+            return toDelete.length;
+          },
+        };
+      },
+    };
+  }
+
+  whereCompound(field: string): DbCompoundWhereClause<T> {
+    // The Moxt collection API does not support compound index range queries;
+    // fall back to parsing the field name and filtering in memory.
+    const parts = field.replace(/^\[|\]$/g, '').split('+');
+    return {
+      between: (lower: unknown[], upper: unknown[]) => ({
+        toArray: async () => {
+          const rows = await this.collection.find({} as Query<T>);
+          return rows.filter((row) => {
+            const rec = row as Record<string, unknown>;
+            for (let i = 0; i < parts.length; i++) {
+              const v = String(rec[parts[i]]);
+              const lo = String(lower[i]);
+              const hi = String(upper[i]);
+              if (v < lo || v > hi) return false;
+            }
+            return true;
+          });
+        },
+      }),
     };
   }
 }
@@ -346,6 +474,10 @@ class TableFacade<K extends TableName> implements DbTable<TableMap[K]> {
     field: Field,
   ): DbWhereClause<TableMap[K]> {
     return this.table.where(field);
+  }
+
+  whereCompound(field: string): DbCompoundWhereClause<TableMap[K]> {
+    return this.table.whereCompound(field);
   }
 }
 

@@ -13,7 +13,12 @@ function validateName(name: string): string {
 
 export const boardService = {
   async list(): Promise<Board[]> {
-    return db.boards.orderBy('updatedAt').reverse().toArray();
+    const all = await db.boards.orderBy('updatedAt').reverse().toArray();
+    return all.filter((b) => !b.deletedAt);
+  },
+
+  async findUpdatedSince(since: string): Promise<Board[]> {
+    return db.boards.where('updatedAt').aboveOrEqual(since).toArray();
   },
 
   async create(name: string): Promise<Board> {
@@ -24,6 +29,7 @@ export const boardService = {
       name: validName,
       createdAt: now,
       updatedAt: now,
+      deletedAt: null,
     };
 
     await db.transaction('rw', db.boards, db.columns, async () => {
@@ -36,6 +42,7 @@ export const boardService = {
           order: 1,
           createdAt: now,
           updatedAt: now,
+          deletedAt: null,
         },
         {
           id: createId('col'),
@@ -44,6 +51,7 @@ export const boardService = {
           order: 2,
           createdAt: now,
           updatedAt: now,
+          deletedAt: null,
         },
         {
           id: createId('col'),
@@ -52,6 +60,7 @@ export const boardService = {
           order: 3,
           createdAt: now,
           updatedAt: now,
+          deletedAt: null,
         },
       ]);
     });
@@ -69,10 +78,22 @@ export const boardService = {
   },
 
   async remove(boardId: string): Promise<void> {
+    const now = nowIso();
     await db.transaction('rw', db.boards, db.columns, db.cards, async () => {
-      await db.cards.where('boardId').equals(boardId).delete();
-      await db.columns.where('boardId').equals(boardId).delete();
-      await db.boards.delete(boardId);
+      const cards = await db.cards.where('boardId').equals(boardId).toArray();
+      await db.cards.bulkPut(
+        cards.map((c) => ({ ...c, deletedAt: now, updatedAt: now })),
+      );
+
+      const columns = await db.columns
+        .where('boardId')
+        .equals(boardId)
+        .toArray();
+      await db.columns.bulkPut(
+        columns.map((c) => ({ ...c, deletedAt: now, updatedAt: now })),
+      );
+
+      await db.boards.update(boardId, { deletedAt: now, updatedAt: now });
     });
   },
 };
