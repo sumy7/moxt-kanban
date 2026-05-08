@@ -10,8 +10,6 @@ import { columnService } from './columnService';
 // How long (ms) without a sync before the next one becomes a full sync.
 const FULL_SYNC_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
-const LAST_SYNC_KEY = 'kanban_last_sync_date';
-
 type MoxtDataChangePayload = { path: string };
 
 type MoxtEventEmitter = {
@@ -21,29 +19,21 @@ type MoxtEventEmitter = {
   ): () => void;
 };
 
-// ── localStorage helpers ───────────────────────────────────────────────────
+// ── In-memory sync timestamp ───────────────────────────────────────────────
+
+let lastSyncDate: string | null = null;
 
 function getLastSyncDate(): string | null {
-  try {
-    return localStorage.getItem(LAST_SYNC_KEY);
-  } catch {
-    return null;
-  }
+  return lastSyncDate;
 }
 
 function setLastSyncDate(date: string): void {
-  try {
-    localStorage.setItem(LAST_SYNC_KEY, date);
-  } catch {
-    // ignore storage errors
-  }
+  lastSyncDate = date;
 }
 
 function needsFullSync(): boolean {
-  const last = getLastSyncDate();
-  if (!last) return true;
-  const ms = new Date(last).getTime();
-  // Treat invalid/garbled stored values as requiring a full sync.
+  if (!lastSyncDate) return true;
+  const ms = new Date(lastSyncDate).getTime();
   if (!Number.isFinite(ms)) return true;
   return Date.now() - ms > FULL_SYNC_THRESHOLD_MS;
 }
@@ -264,7 +254,8 @@ export function destroySync(): void {
     unsubDataChange();
     unsubDataChange = null;
   }
-  // lastSyncDate is persisted in localStorage — do not clear it on destroy.
+
+  lastSyncDate = null;
 }
 
 export { performFullSync as fullSync };
