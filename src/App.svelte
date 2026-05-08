@@ -444,7 +444,7 @@
 <main>
   <header class="toolbar">
     <div class="toolbar-title">
-      <h1>Local-first Kanban</h1>
+      <h1>Moxt Kanban</h1>
       <span class="backend-chip" aria-label="Current backend provider">
         Backend: {backendProviderLabel}
       </span>
@@ -702,16 +702,20 @@
 </main>
 
 <style>
-  :global(html),
-  :global(body),
-  :global(#app) {
-    height: 100%;
+  :global(body) {
+    position: relative;
+    margin: 0;
+    font-family: 'JetBrains Mono Variable', monospace;
+    background: var(--background);
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
   }
-
+  
   main {
     height: 100vh;
     height: 100dvh;
-    width: 100%;
+    width: 100vw;
     padding: 0.75rem;
     max-width: none;
     margin: 0;
