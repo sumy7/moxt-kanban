@@ -10,6 +10,8 @@ import { columnService } from './columnService';
 // How long (ms) without a sync before the next one becomes a full sync.
 const FULL_SYNC_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
+const LAST_SYNC_KEY = 'kanban_last_sync_date';
+
 type MoxtDataChangePayload = { path: string };
 
 type MoxtEventEmitter = {
@@ -19,21 +21,31 @@ type MoxtEventEmitter = {
   ): () => void;
 };
 
-// ── In-memory sync timestamp ───────────────────────────────────────────────
-
-let lastSyncDate: string | null = null;
+// ── localStorage helpers ───────────────────────────────────────────────────
 
 function getLastSyncDate(): string | null {
-  return lastSyncDate;
+  try {
+    return localStorage.getItem(LAST_SYNC_KEY);
+  } catch {
+    return null;
+  }
 }
 
 function setLastSyncDate(date: string): void {
-  lastSyncDate = date;
+  try {
+    localStorage.setItem(LAST_SYNC_KEY, date);
+  } catch {
+    // ignore storage errors
+  }
 }
 
 function needsFullSync(): boolean {
-  if (!lastSyncDate) return true;
-  return Date.now() - new Date(lastSyncDate).getTime() > FULL_SYNC_THRESHOLD_MS;
+  const last = getLastSyncDate();
+  if (!last) return true;
+  const ms = new Date(last).getTime();
+  // Treat invalid/garbled stored values as requiring a full sync.
+  if (!Number.isFinite(ms)) return true;
+  return Date.now() - ms > FULL_SYNC_THRESHOLD_MS;
 }
 
 // ── Store merge helpers ────────────────────────────────────────────────────
@@ -70,6 +82,24 @@ function mergeOrdered<
   return result.sort((a, b) => a.order - b.order);
 }
 
+// ── Board / store helpers ──────────────────────────────────────────────────
+
+/**
+ * Given a list of available boards and the current active board id, returns
+ * the id to use as the active board (falling back to the first board or null).
+ * Also returns whether the current active board is still valid.
+ */
+function resolveActiveBoardId(
+  boards: Board[],
+  currentActiveId: string | null,
+): { id: string | null; changed: boolean } {
+  const stillValid =
+    !!currentActiveId && boards.some((b) => b.id === currentActiveId);
+  if (stillValid) return { id: currentActiveId, changed: false };
+  const id = boards.length > 0 ? boards[0].id : null;
+  return { id, changed: true };
+}
+
 // ── Sync operations ────────────────────────────────────────────────────────
 
 async function performFullSync(): Promise<void> {
@@ -78,14 +108,25 @@ async function performFullSync(): Promise<void> {
   const boards = await boardService.list();
   boardsStore.set(boards);
 
-  const activeBoardId = get(activeBoardIdStore);
-  if (activeBoardId && boards.some((b) => b.id === activeBoardId)) {
+  const { id: resolvedBoardId, changed } = resolveActiveBoardId(
+    boards,
+    get(activeBoardIdStore),
+  );
+
+  if (changed) {
+    activeBoardIdStore.set(resolvedBoardId);
+  }
+
+  if (resolvedBoardId) {
     const [columns, cards] = await Promise.all([
-      columnService.listByBoard(activeBoardId),
-      cardService.listByBoard(activeBoardId),
+      columnService.listByBoard(resolvedBoardId),
+      cardService.listByBoard(resolvedBoardId),
     ]);
     columnsStore.set(columns);
     cardsStore.set(cards);
+  } else {
+    columnsStore.set([]);
+    cardsStore.set([]);
   }
 
   setLastSyncDate(syncTime);
@@ -100,15 +141,26 @@ async function performIncrementalSync(): Promise<void> {
   const syncTime = new Date().toISOString();
 
   const updatedBoards = await boardService.findUpdatedSince(since);
+  let currentBoards = get(boardsStore);
   if (updatedBoards.length > 0) {
-    boardsStore.update((current) => mergeBoards(current, updatedBoards));
+    currentBoards = mergeBoards(currentBoards, updatedBoards);
+    boardsStore.set(currentBoards);
   }
 
-  const activeBoardId = get(activeBoardIdStore);
-  if (activeBoardId) {
+  // Re-validate the active board after the merge — it may have been deleted.
+  const { id: resolvedBoardId, changed } = resolveActiveBoardId(
+    currentBoards,
+    get(activeBoardIdStore),
+  );
+
+  if (changed) {
+    activeBoardIdStore.set(resolvedBoardId);
+  }
+
+  if (resolvedBoardId) {
     const [updatedColumns, updatedCards] = await Promise.all([
-      columnService.findUpdatedSince(activeBoardId, since),
-      cardService.findUpdatedSince(activeBoardId, since),
+      columnService.findUpdatedSince(resolvedBoardId, since),
+      cardService.findUpdatedSince(resolvedBoardId, since),
     ]);
 
     if (updatedColumns.length > 0) {
@@ -118,17 +170,36 @@ async function performIncrementalSync(): Promise<void> {
     if (updatedCards.length > 0) {
       cardsStore.update((current) => mergeOrdered(current, updatedCards));
     }
+  } else {
+    columnsStore.set([]);
+    cardsStore.set([]);
   }
 
   setLastSyncDate(syncTime);
 }
 
+// ── Concurrency lock ───────────────────────────────────────────────────────
+
+let syncInFlight: Promise<void> | null = null;
+
 async function triggerSync(): Promise<void> {
-  if (needsFullSync()) {
-    await performFullSync();
-  } else {
-    await performIncrementalSync();
+  // Coalesce concurrent callers onto the running sync promise.
+  if (syncInFlight) {
+    return syncInFlight;
   }
+
+  const promise = (async () => {
+    if (needsFullSync()) {
+      await performFullSync();
+    } else {
+      await performIncrementalSync();
+    }
+  })().finally(() => {
+    syncInFlight = null;
+  });
+
+  syncInFlight = promise;
+  return promise;
 }
 
 // ── Event listeners ────────────────────────────────────────────────────────
@@ -166,11 +237,14 @@ let unsubDataChange: (() => void) | null = null;
 export function initSync(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
+  // Ensure no stale listeners accumulate if initSync is called more than once.
+  destroySync();
+
   boundVisibilityChange = handleVisibilityChange;
   document.addEventListener('visibilitychange', boundVisibilityChange);
 
   const moxt = (window as Window & { moxt?: MoxtEventEmitter }).moxt;
-  if (moxt) {
+  if (moxt && typeof moxt.on === 'function') {
     unsubDataChange = moxt.on('data:change', handleDataChange);
   }
 }
@@ -185,8 +259,7 @@ export function destroySync(): void {
     unsubDataChange();
     unsubDataChange = null;
   }
-
-  lastSyncDate = null;
+  // lastSyncDate is persisted in localStorage — do not clear it on destroy.
 }
 
 export { performFullSync as fullSync };

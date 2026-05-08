@@ -23,7 +23,7 @@ type MoxtCollection<T extends { id: string }> = {
 
 type MoxtApi = {
   collection<T extends { id: string }>(name: string): MoxtCollection<T>;
-  on(
+  on?(
     event: 'data:change',
     callback: (payload: { path: string }) => void | Promise<void>,
   ): () => void;
@@ -37,6 +37,7 @@ type DbWhereEquals<T extends Entity> = {
 
 type DbWhereClause<T extends Entity> = {
   equals(value: unknown): DbWhereEquals<T>;
+  aboveOrEqual(value: unknown): DbWhereEquals<T>;
 };
 
 type DbOrderByArray<T extends Entity> = {
@@ -100,6 +101,16 @@ class DexieDatabase extends Dexie {
           tx.table('cards').toCollection().modify({ deletedAt: null }),
         ]);
       });
+
+    // v3: add compound [boardId+updatedAt] index to columns and cards for
+    // efficient incremental-sync range queries.
+    this.version(3).stores({
+      boards: 'id, name, deletedAt, createdAt, updatedAt',
+      columns:
+        'id, boardId, [boardId+order], [boardId+updatedAt], deletedAt, createdAt, updatedAt',
+      cards:
+        'id, boardId, columnId, [columnId+order], [boardId+updatedAt], dueDate, priority, deletedAt, createdAt, updatedAt',
+    });
   }
 }
 
@@ -151,6 +162,18 @@ class DexieTableAdapter<T extends Entity> implements DbTable<T> {
         const collection = this.tableRef
           .where(field as string)
           .equals(value as IndexableType);
+
+        return {
+          toArray: () => collection.toArray(),
+          sortBy: <S extends keyof T>(sortField: S) =>
+            collection.sortBy(sortField as string),
+          delete: () => collection.delete(),
+        };
+      },
+      aboveOrEqual: (value: unknown) => {
+        const collection = this.tableRef
+          .where(field as string)
+          .aboveOrEqual(value as IndexableType);
 
         return {
           toArray: () => collection.toArray(),
@@ -286,6 +309,39 @@ class MoxtTableAdapter<T extends Entity> implements DbTable<T> {
               ),
             );
             return rows.length;
+          },
+        };
+      },
+      aboveOrEqual: (value: unknown) => {
+        const fieldKey = field as string;
+        const compareVal = String(value);
+
+        const filterGte = (rows: T[]) =>
+          rows.filter(
+            (row) =>
+              String((row as Record<string, unknown>)[fieldKey]) >= compareVal,
+          );
+
+        return {
+          toArray: async () => {
+            const rows = await this.collection.find({} as Query<T>);
+            return filterGte(rows);
+          },
+          sortBy: async <S extends keyof T>(sortField: S) => {
+            const rows = await this.collection.find({} as Query<T>, {
+              sort: { [sortField]: 1 } as Sort<T>,
+            });
+            return filterGte(rows);
+          },
+          delete: async () => {
+            const rows = await this.collection.find({} as Query<T>);
+            const toDelete = filterGte(rows);
+            await Promise.all(
+              toDelete.map((row) =>
+                this.collection.deleteOne({ id: row.id } as Query<T>),
+              ),
+            );
+            return toDelete.length;
           },
         };
       },

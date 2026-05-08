@@ -61,7 +61,7 @@ export const cardService = {
 
   async findUpdatedSince(boardId: string, since: string): Promise<Card[]> {
     const all = await db.cards.where('boardId').equals(boardId).toArray();
-    return all.filter((c) => c.updatedAt > since);
+    return all.filter((c) => c.updatedAt >= since);
   },
 
   async create(input: CardInput): Promise<Card> {

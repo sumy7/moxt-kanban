@@ -18,8 +18,7 @@ export const boardService = {
   },
 
   async findUpdatedSince(since: string): Promise<Board[]> {
-    const all = await db.boards.orderBy('updatedAt').toArray();
-    return all.filter((b) => b.updatedAt > since);
+    return db.boards.where('updatedAt').aboveOrEqual(since).toArray();
   },
 
   async create(name: string): Promise<Board> {
