@@ -189,10 +189,16 @@ async function triggerSync(): Promise<void> {
   }
 
   syncInFlight = (async () => {
-    if (needsFullSync()) {
-      await performFullSync();
-    } else {
-      await performIncrementalSync();
+    try {
+      if (needsFullSync()) {
+        await performFullSync();
+      } else {
+        await performIncrementalSync();
+      }
+    } catch (error) {
+      // Absorb errors so the shared promise never rejects and leaves callers
+      // with an unhandled rejection. Sync will be retried on the next trigger.
+      console.error('[syncService] Sync failed:', error);
     }
   })().finally(() => {
     syncInFlight = null;

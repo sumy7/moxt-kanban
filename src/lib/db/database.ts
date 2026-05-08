@@ -113,7 +113,9 @@ class DexieDatabase extends Dexie {
       });
 
     // v3: add compound [boardId+updatedAt] index to columns and cards for
-    // efficient incremental-sync range queries.
+    // efficient incremental-sync range queries. No upgrade callback is needed:
+    // Dexie automatically rebuilds indexes for existing records when only
+    // index definitions change without schema alterations.
     this.version(3).stores({
       boards: 'id, name, deletedAt, createdAt, updatedAt',
       columns:
