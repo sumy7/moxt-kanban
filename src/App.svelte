@@ -357,7 +357,7 @@
   ): Card[] {
     const current = cards.find((card) => card.id === cardId);
     if (!current) {
-      throw new Error(`Card not found: ${cardId}`);
+      throw new Error(`Optimistic update error: card not found with id ${cardId}`);
     }
 
     const normalized = normalizeCardUpdate(update);
@@ -378,7 +378,7 @@
 
     const remainingCards = cards.filter((card) => card.id !== cardId);
     const sourceCards = remainingCards
-      .filter((card) => card.columnId === current.columnId && !card.deletedAt)
+      .filter((card) => card.columnId === current.columnId)
       .sort((a, b) => a.order - b.order);
     const sourceReordered = new Map(
       sourceCards.map((card, index) => [
@@ -387,7 +387,7 @@
       ]),
     );
     const targetMaxOrder = remainingCards
-      .filter((card) => card.columnId === normalized.columnId && !card.deletedAt)
+      .filter((card) => card.columnId === normalized.columnId)
       .reduce((max, card) => Math.max(max, card.order), 0);
 
     return [
@@ -420,10 +420,10 @@
         const snapshot = $cardsStore;
         cardsStore.set(buildOptimisticUpdatedCards(snapshot, cardEditor.editingCardId, update));
         cardEditor.open = false;
-        notifySuccess('Card updated.');
 
         try {
           await cardService.update(cardEditor.editingCardId, update);
+          notifySuccess('Card updated.');
         } catch (error) {
           cardsStore.set(snapshot);
           cardEditor.open = true;
