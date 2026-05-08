@@ -73,11 +73,27 @@
     }
   }
 
-  function setDropPosition(event: DragEvent, columnId: string, index: number): void {
+  function handleColumnDragOver(event: DragEvent, columnId: string, fallbackIndex: number): void {
     event.preventDefault();
     event.stopPropagation();
+    // Only set the index when first entering this column; once inside, let
+    // card-level handlers (which use midpoint detection) own the index so that
+    // hovering over the CSS gap between cards does not reset it to `length`.
+    if (activeDropColumnId !== columnId) {
+      activeDropIndex = fallbackIndex;
+    }
     activeDropColumnId = columnId;
-    activeDropIndex = index;
+  }
+
+  function handleCardDragOver(event: DragEvent, columnId: string, cardIndex: number): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const target = event.currentTarget as HTMLElement;
+    const { top, height } = target.getBoundingClientRect();
+    // Insert before the card when in the top half, after when in the bottom half.
+    const insertIndex = event.clientY < top + height / 2 ? cardIndex : cardIndex + 1;
+    activeDropColumnId = columnId;
+    activeDropIndex = insertIndex;
   }
 
   function dropToColumn(event: DragEvent, columnId: string, overCardId?: string): void {
@@ -146,7 +162,7 @@
             class="grid min-h-0 flex-1 auto-rows-min gap-2 overflow-y-auto"
             role="list"
             aria-label={`Cards in ${column.title}`}
-            ondragover={(event) => setDropPosition(event, column.id, columnCards.length)}
+            ondragover={(event) => handleColumnDragOver(event, column.id, columnCards.length)}
             ondrop={(event) => dropToColumn(event, column.id)}
           >
             {#each columnCards as card, index (card.id)}
@@ -162,8 +178,7 @@
                 aria-label={`Card ${card.title}`}
                 ondragstart={(event) => startDrag(event, card)}
                 ondragend={handleDragEnd}
-                ondragenter={(event) => setDropPosition(event, column.id, index)}
-                ondragover={(event) => setDropPosition(event, column.id, index)}
+                ondragover={(event) => handleCardDragOver(event, column.id, index)}
                 ondrop={(event) => dropToColumn(event, column.id, card.id)}
               >
                 <UiCard.Root size="sm" class="gap-2 rounded-none border">
