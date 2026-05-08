@@ -35,15 +35,25 @@
     onDropCard,
   }: Props = $props();
 
-  let keyboardSelectedCardId = $state<string | null>(null);
+  let draggingCardId = $state<string | null>(null);
+  let activeDropColumnId = $state<string | null>(null);
+  let activeDropIndex = $state<number | null>(null);
 
   function startDrag(event: DragEvent, card: KanbanCard): void {
     if (!event.dataTransfer) {
       return;
     }
 
+    draggingCardId = card.id;
+    activeDropIndex = null;
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('application/json', JSON.stringify({ cardId: card.id }));
+  }
+
+  function handleDragEnd(): void {
+    draggingCardId = null;
+    activeDropColumnId = null;
+    activeDropIndex = null;
   }
 
   function readPayload(event: DragEvent): { cardId: string } | null {
@@ -63,93 +73,32 @@
     }
   }
 
-  function clearKeyboardSelection(): void {
-    keyboardSelectedCardId = null;
-  }
-
-  function dropToColumnEnd(columnId: string): void {
-    if (!keyboardSelectedCardId) {
-      return;
-    }
-
-    const list = cardsByColumn[columnId] ?? [];
-    onDropCard(keyboardSelectedCardId, columnId, list.length);
-  }
-
-  function handleColumnDrop(event: DragEvent, columnId: string): void {
+  function setDropPosition(event: DragEvent, columnId: string, index: number): void {
     event.preventDefault();
+    event.stopPropagation();
+    activeDropColumnId = columnId;
+    activeDropIndex = index;
+  }
+
+  function dropToColumn(event: DragEvent, columnId: string, overCardId?: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+
     const payload = readPayload(event);
     if (!payload) {
       return;
     }
+    if (overCardId && payload.cardId === overCardId) {
+      handleDragEnd();
+      return;
+    }
 
     const list = cardsByColumn[columnId] ?? [];
-    onDropCard(payload.cardId, columnId, list.length);
-  }
+    const resolvedIndex =
+      activeDropColumnId === columnId && activeDropIndex !== null ? activeDropIndex : list.length;
 
-  function handleColumnDropZoneKeydown(event: KeyboardEvent, columnId: string): void {
-    if (!keyboardSelectedCardId) {
-      return;
-    }
-
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      dropToColumnEnd(columnId);
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      clearKeyboardSelection();
-    }
-  }
-
-  function handleCardKeydown(
-    event: KeyboardEvent,
-    card: KanbanCard,
-    columnId: string,
-    index: number,
-  ): void {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      keyboardSelectedCardId = keyboardSelectedCardId === card.id ? null : card.id;
-      return;
-    }
-
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      clearKeyboardSelection();
-      return;
-    }
-
-    if (keyboardSelectedCardId !== card.id) {
-      return;
-    }
-
-    if (event.key === 'ArrowUp' && index > 0) {
-      event.preventDefault();
-      onDropCard(card.id, columnId, index - 1);
-      return;
-    }
-
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      onDropCard(card.id, columnId, index + 1);
-      return;
-    }
-
-    const columnIndex = columns.findIndex((column) => column.id === columnId);
-    if (event.key === 'ArrowLeft' && columnIndex > 0) {
-      event.preventDefault();
-      const targetColumnId = columns[columnIndex - 1].id;
-      const list = cardsByColumn[targetColumnId] ?? [];
-      onDropCard(card.id, targetColumnId, list.length);
-      return;
-    }
-
-    if (event.key === 'ArrowRight' && columnIndex < columns.length - 1) {
-      event.preventDefault();
-      const targetColumnId = columns[columnIndex + 1].id;
-      const list = cardsByColumn[targetColumnId] ?? [];
-      onDropCard(card.id, targetColumnId, list.length);
-    }
+    onDropCard(payload.cardId, columnId, resolvedIndex);
+    handleDragEnd();
   }
 </script>
 
@@ -161,10 +110,16 @@
     onAction={onAddColumn}
   />
 {:else}
-  <div class="overflow-x-auto pb-3">
-    <div class="flex min-w-max items-start gap-4">
+  <div class="h-full overflow-x-auto pb-1">
+    <div class="flex h-full min-w-max items-stretch gap-3">
       {#each columns as column (column.id)}
-        <section class="flex min-h-[220px] w-[320px] flex-col gap-3 rounded-lg border bg-card p-3 text-card-foreground">
+        {@const columnCards = cardsByColumn[column.id] ?? []}
+        <section
+          class={`flex h-full max-h-full min-h-[220px] w-[320px] flex-col gap-2 border bg-card p-2 text-card-foreground transition-colors ${
+            activeDropColumnId === column.id ? 'border-primary bg-accent/35' : 'border-border'
+          }`}
+          style="--column-card-height: 74px;"
+        >
           <header class="flex items-start justify-between gap-2">
             <h3 class="pt-1 text-sm font-semibold">{column.title}</h3>
             <div class="flex flex-wrap justify-end gap-1">
@@ -186,48 +141,32 @@
               </Button>
             </div>
           </header>
-          <p class="text-[11px] text-muted-foreground">
-            Drag cards with mouse, or focus a card and press Space then arrow keys to move.
-          </p>
 
           <div
-            class="rounded border border-dashed border-border bg-muted/30 px-2 py-1.5 text-[11px] text-muted-foreground"
-            role="button"
-            tabindex="0"
-            aria-label={`Drop selected card into ${column.title}`}
-            ondragover={(event) => event.preventDefault()}
-            ondrop={(event) => handleColumnDrop(event, column.id)}
-            onkeydown={(event) => handleColumnDropZoneKeydown(event, column.id)}
+            class="grid min-h-0 flex-1 auto-rows-min gap-2 overflow-y-auto"
+            role="list"
+            aria-label={`Cards in ${column.title}`}
+            ondragover={(event) => setDropPosition(event, column.id, columnCards.length)}
+            ondrop={(event) => dropToColumn(event, column.id)}
           >
-            {#if keyboardSelectedCardId}
-              Press Enter to drop selected card here
-            {:else}
-              Drop zone
-            {/if}
-          </div>
+            {#each columnCards as card, index (card.id)}
+              {#if draggingCardId && activeDropColumnId === column.id && activeDropIndex === index}
+                <div class="drop-placeholder" aria-hidden="true"></div>
+              {/if}
 
-          <div class="grid gap-2" role="list" aria-label={`Cards in ${column.title}`}>
-            {#each cardsByColumn[column.id] ?? [] as card, index (card.id)}
               <div
                 draggable="true"
-                class="rounded-md"
-                tabindex="0"
-                role="button"
-                aria-grabbed={keyboardSelectedCardId === card.id}
+                class={`transition duration-150 ease-out ${draggingCardId === card.id ? 'scale-[0.98] opacity-45' : 'opacity-100'}`}
+                style="min-height: var(--column-card-height);"
+                role="listitem"
                 aria-label={`Card ${card.title}`}
                 ondragstart={(event) => startDrag(event, card)}
-                ondragover={(event) => event.preventDefault()}
-                ondrop={(event) => {
-                  event.preventDefault();
-                  const payload = readPayload(event);
-                  if (!payload || payload.cardId === card.id) {
-                    return;
-                  }
-                  onDropCard(payload.cardId, column.id, index);
-                }}
-                onkeydown={(event) => handleCardKeydown(event, card, column.id, index)}
+                ondragend={handleDragEnd}
+                ondragenter={(event) => setDropPosition(event, column.id, index)}
+                ondragover={(event) => setDropPosition(event, column.id, index)}
+                ondrop={(event) => dropToColumn(event, column.id, card.id)}
               >
-                <UiCard.Root size="sm" class="gap-2">
+                <UiCard.Root size="sm" class="gap-2 rounded-none border">
                   <UiCard.Content class="space-y-2 px-3">
                     <UiCard.Title class="flex items-center gap-1 text-xs">
                       <GripVertical class="size-3 text-muted-foreground" />
@@ -266,6 +205,10 @@
                 </UiCard.Root>
               </div>
             {/each}
+
+            {#if draggingCardId && activeDropColumnId === column.id && activeDropIndex === columnCards.length}
+              <div class="drop-placeholder" aria-hidden="true"></div>
+            {/if}
           </div>
 
           <Button class="mt-1" type="button" variant="secondary" onclick={() => onAddCard(column.id)}>
@@ -275,10 +218,31 @@
         </section>
       {/each}
 
-      <Button type="button" variant="outline" class="h-10 w-[190px] border-dashed" onclick={onAddColumn}>
+      <Button type="button" variant="outline" class="h-10 w-[190px] self-start border-dashed" onclick={onAddColumn}>
         <Plus class="size-3.5" />
         Add Column
       </Button>
     </div>
   </div>
 {/if}
+
+<style>
+  .drop-placeholder {
+    --placeholder-offset: 6px;
+    height: var(--column-card-height);
+    border: 1px dashed var(--primary);
+    background: color-mix(in oklch, var(--accent) 72%, transparent);
+    animation: placeholder-move 150ms ease-out;
+  }
+
+  @keyframes placeholder-move {
+    0% {
+      transform: translateY(var(--placeholder-offset));
+      opacity: 0.45;
+    }
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+</style>
