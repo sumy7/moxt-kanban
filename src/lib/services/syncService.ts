@@ -10,35 +10,30 @@ import { columnService } from './columnService';
 // How long (ms) without a sync before the next one becomes a full sync.
 const FULL_SYNC_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
-const LAST_SYNC_KEY = 'kanban_last_sync_date';
+type MoxtDataChangePayload = { path: string };
 
 type MoxtEventEmitter = {
-  on(event: 'data:change', callback: () => Promise<void>): void;
-  off?(event: 'data:change', callback: () => Promise<void>): void;
+  on(
+    event: 'data:change',
+    callback: (payload: MoxtDataChangePayload) => void | Promise<void>,
+  ): () => void;
 };
 
-// ── localStorage helpers ───────────────────────────────────────────────────
+// ── In-memory sync timestamp ───────────────────────────────────────────────
+
+let lastSyncDate: string | null = null;
 
 function getLastSyncDate(): string | null {
-  try {
-    return localStorage.getItem(LAST_SYNC_KEY);
-  } catch {
-    return null;
-  }
+  return lastSyncDate;
 }
 
 function setLastSyncDate(date: string): void {
-  try {
-    localStorage.setItem(LAST_SYNC_KEY, date);
-  } catch {
-    // ignore storage errors
-  }
+  lastSyncDate = date;
 }
 
 function needsFullSync(): boolean {
-  const last = getLastSyncDate();
-  if (!last) return true;
-  return Date.now() - new Date(last).getTime() > FULL_SYNC_THRESHOLD_MS;
+  if (!lastSyncDate) return true;
+  return Date.now() - new Date(lastSyncDate).getTime() > FULL_SYNC_THRESHOLD_MS;
 }
 
 // ── Store merge helpers ────────────────────────────────────────────────────
@@ -58,10 +53,9 @@ function mergeBoards(current: Board[], updated: Board[]): Board[] {
   return result.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-function mergeOrdered<T extends { id: string; deletedAt: string | null; order: number }>(
-  current: T[],
-  updated: T[],
-): T[] {
+function mergeOrdered<
+  T extends { id: string; deletedAt: string | null; order: number },
+>(current: T[], updated: T[]): T[] {
   const result = [...current];
   for (const item of updated) {
     const idx = result.findIndex((i) => i.id === item.id);
@@ -118,15 +112,11 @@ async function performIncrementalSync(): Promise<void> {
     ]);
 
     if (updatedColumns.length > 0) {
-      columnsStore.update((current) =>
-        mergeOrdered(current, updatedColumns),
-      );
+      columnsStore.update((current) => mergeOrdered(current, updatedColumns));
     }
 
     if (updatedCards.length > 0) {
-      cardsStore.update((current) =>
-        mergeOrdered(current, updatedCards),
-      );
+      cardsStore.update((current) => mergeOrdered(current, updatedCards));
     }
   }
 
@@ -143,8 +133,15 @@ async function triggerSync(): Promise<void> {
 
 // ── Event listeners ────────────────────────────────────────────────────────
 
-async function handleDataChange(): Promise<void> {
-  if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+const WATCHED_PATHS = ['boards', 'columns', 'cards'];
+
+async function handleDataChange(payload: MoxtDataChangePayload): Promise<void> {
+  if (!WATCHED_PATHS.some((p) => payload.path.startsWith(p))) return;
+
+  if (
+    typeof document !== 'undefined' &&
+    document.visibilityState === 'visible'
+  ) {
     await triggerSync();
   }
   // If the page is hidden, the visibilitychange handler will trigger a sync
@@ -152,7 +149,10 @@ async function handleDataChange(): Promise<void> {
 }
 
 function handleVisibilityChange(): void {
-  if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+  if (
+    typeof document !== 'undefined' &&
+    document.visibilityState === 'visible'
+  ) {
     // Always sync when the page becomes visible.
     void triggerSync();
   }
@@ -161,7 +161,7 @@ function handleVisibilityChange(): void {
 // ── Lifecycle ──────────────────────────────────────────────────────────────
 
 let boundVisibilityChange: (() => void) | null = null;
-let boundDataChange: (() => Promise<void>) | null = null;
+let unsubDataChange: (() => void) | null = null;
 
 export function initSync(): void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
@@ -171,8 +171,7 @@ export function initSync(): void {
 
   const moxt = (window as Window & { moxt?: MoxtEventEmitter }).moxt;
   if (moxt) {
-    boundDataChange = handleDataChange;
-    moxt.on('data:change', boundDataChange);
+    unsubDataChange = moxt.on('data:change', handleDataChange);
   }
 }
 
@@ -182,13 +181,12 @@ export function destroySync(): void {
     boundVisibilityChange = null;
   }
 
-  if (typeof window !== 'undefined') {
-    const moxt = (window as Window & { moxt?: MoxtEventEmitter }).moxt;
-    if (moxt?.off && boundDataChange) {
-      moxt.off('data:change', boundDataChange);
-    }
+  if (unsubDataChange) {
+    unsubDataChange();
+    unsubDataChange = null;
   }
-  boundDataChange = null;
+
+  lastSyncDate = null;
 }
 
 export { performFullSync as fullSync };

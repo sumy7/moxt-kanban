@@ -23,8 +23,10 @@ type MoxtCollection<T extends { id: string }> = {
 
 type MoxtApi = {
   collection<T extends { id: string }>(name: string): MoxtCollection<T>;
-  on(event: 'data:change', callback: () => Promise<void>): void;
-  off?(event: 'data:change', callback: () => Promise<void>): void;
+  on(
+    event: 'data:change',
+    callback: (payload: { path: string }) => void | Promise<void>,
+  ): () => void;
 };
 
 type DbWhereEquals<T extends Entity> = {
@@ -86,7 +88,8 @@ class DexieDatabase extends Dexie {
     this.version(2)
       .stores({
         boards: 'id, name, deletedAt, createdAt, updatedAt',
-        columns: 'id, boardId, [boardId+order], deletedAt, createdAt, updatedAt',
+        columns:
+          'id, boardId, [boardId+order], deletedAt, createdAt, updatedAt',
         cards:
           'id, boardId, columnId, [columnId+order], dueDate, priority, deletedAt, createdAt, updatedAt',
       })
