@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import BoardToolbar from './lib/components/shared/BoardToolbar.svelte';
   import BoardView from './lib/components/board/BoardView.svelte';
   import ConfirmDialog from './lib/components/shared/ConfirmDialog.svelte';
   import DatePicker from './lib/components/shared/DatePicker.svelte';
   import EmptyState from './lib/components/shared/EmptyState.svelte';
   import Modal from './lib/components/shared/Modal.svelte';
-  import TableToolbar from './lib/components/table/TableToolbar.svelte';
   import TableView from './lib/components/table/TableView.svelte';
   import { Button } from '$lib/components/ui/button/index.js';
   import { Input } from '$lib/components/ui/input/index.js';
@@ -13,73 +13,48 @@
   import { Textarea } from '$lib/components/ui/textarea/index.js';
   import { db } from './lib/db/database';
   import { seedIfNeeded } from './lib/db/seed';
-  import { boardService } from './lib/services/boardService';
-  import {
-    cardService,
-    normalizeCardUpdate,
-    type CardInput,
-    type CardUpdate,
-  } from './lib/services/cardService';
-  import { columnService } from './lib/services/columnService';
   import { filterAndSortCards } from './lib/services/filterService';
+  import { initSync, destroySync } from './lib/services/syncService';
   import { activeBoardIdStore, boardsStore } from './lib/stores/boards';
   import { cardsStore } from './lib/stores/cards';
   import { columnsStore } from './lib/stores/columns';
-  import { defaultFilters, filtersStore } from './lib/stores/filters';
+  import { filtersStore } from './lib/stores/filters';
   import { toastStore } from './lib/stores/ui';
-  import { nowIso } from './lib/utils/date';
-  import { initSync, destroySync } from './lib/services/syncService';
-  import type { Board, Card, CardFilters, CardPriority, Column, SortField } from './lib/types';
+  import { createNotifications } from './lib/hooks/useNotifications.svelte';
+  import { createConfirm } from './lib/hooks/useConfirm.svelte';
+  import { createDataLoader } from './lib/hooks/useDataLoader.svelte';
+  import { createBoardActions } from './lib/hooks/useBoardActions.svelte';
+  import { createColumnActions } from './lib/hooks/useColumnActions.svelte';
+  import { createCardActions } from './lib/hooks/useCardActions.svelte';
+  import { createFilters } from './lib/hooks/useFilters.svelte';
+  import type { Card, CardPriority } from './lib/types';
 
-  type ConfirmState = {
-    open: boolean;
-    title: string;
-    message: string;
-    action: (() => Promise<void>) | null;
-  };
+  // — hooks —
+  const notify = createNotifications();
+  const confirm = createConfirm(notify.safely);
+  const loader = createDataLoader();
+  const boards = createBoardActions({
+    reloadBoards: loader.reloadBoards,
+    notifySuccess: notify.notifySuccess,
+    safely: notify.safely,
+    requestConfirm: confirm.request,
+  });
+  const columns = createColumnActions({
+    loadBoardData: loader.loadBoardData,
+    notifySuccess: notify.notifySuccess,
+    safely: notify.safely,
+    requestConfirm: confirm.request,
+  });
+  const cards = createCardActions({
+    loadBoardData: loader.loadBoardData,
+    notifySuccess: notify.notifySuccess,
+    safely: notify.safely,
+    requestConfirm: confirm.request,
+  });
+  const filters = createFilters();
 
-  type CardEditorState = {
-    open: boolean;
-    editingCardId: string | null;
-    boardId: string;
-    columnId: string;
-    title: string;
-    description: string;
-    priority: CardPriority;
-    tagsText: string;
-    dueDate: string;
-  };
-
+  // — app-level state —
   let loading = $state(true);
-  let errorMessage = $state('');
-
-  let boardModalOpen = $state(false);
-  let editingBoardId = $state<string | null>(null);
-  let boardNameInput = $state('');
-
-  let columnModalOpen = $state(false);
-  let editingColumnId = $state<string | null>(null);
-  let columnTitleInput = $state('');
-  let filterModalOpen = $state(false);
-
-  let cardEditor = $state<CardEditorState>({
-    open: false,
-    editingCardId: null,
-    boardId: '',
-    columnId: '',
-    title: '',
-    description: '',
-    priority: 'medium',
-    tagsText: '',
-    dueDate: '',
-  });
-
-  let confirmState = $state<ConfirmState>({
-    open: false,
-    title: '',
-    message: '',
-    action: null,
-  });
 
   const activeBoard = $derived(
     $boardsStore.find((board) => board.id === $activeBoardIdStore) ?? null,
@@ -94,10 +69,10 @@
   const activeBoardLabel = $derived(activeBoard?.name ?? 'Select Board');
   const backendProviderLabel = $derived(db.provider === 'moxt' ? 'moxt' : 'indexeddb');
 
-  const cardPriorityLabel = $derived(cardEditor.priority);
+  const cardPriorityLabel = $derived(cards.editor.priority);
 
   const cardColumnLabel = $derived.by(() => {
-    return $columnsStore.find((column) => column.id === cardEditor.columnId)?.title ?? 'Select Column';
+    return $columnsStore.find((col) => col.id === cards.editor.columnId)?.title ?? 'Select Column';
   });
 
   const cardsByColumn = $derived.by(() => {
@@ -124,10 +99,10 @@
   onMount(async () => {
     try {
       await seedIfNeeded();
-      await reloadBoards(true);
+      await loader.reloadBoards(true);
       initSync();
     } catch (error) {
-      errorMessage = parseError(error);
+      notify.notifyError(notify.parseError(error));
     } finally {
       loading = false;
     }
@@ -137,378 +112,10 @@
     destroySync();
   });
 
-  async function reloadBoards(selectFirst = false): Promise<void> {
-    const boards = await boardService.list();
-    boardsStore.set(boards);
-
-    if (boards.length === 0) {
-      activeBoardIdStore.set(null);
-      columnsStore.set([]);
-      cardsStore.set([]);
-      return;
-    }
-
-    const activeId = $activeBoardIdStore;
-    const boardId =
-      selectFirst || !activeId || !boards.some((board) => board.id === activeId)
-        ? boards[0].id
-        : activeId;
-
-    activeBoardIdStore.set(boardId);
-    await loadBoardData(boardId);
-  }
-
-  async function loadBoardData(boardId: string): Promise<void> {
-    const [columns, cards] = await Promise.all([
-      columnService.listByBoard(boardId),
-      cardService.listByBoard(boardId),
-    ]);
-    columnsStore.set(columns);
-    cardsStore.set(cards);
-
-    const validColumnIds = new Set(columns.map((column) => column.id));
-    filtersStore.update((filters) => ({
-      ...filters,
-      columnIds: filters.columnIds.filter((columnId) => validColumnIds.has(columnId)),
-    }));
-  }
-
-  function parseError(error: unknown): string {
-    if (error instanceof Error) {
-      return error.message;
-    }
-    return 'Unknown error';
-  }
-
-  function notifySuccess(message: string): void {
-    toastStore.set({ type: 'success', message });
-    setTimeout(() => toastStore.set(null), 2200);
-  }
-
-  function notifyError(message: string): void {
-    toastStore.set({ type: 'error', message });
-  }
-
-  async function safely(task: () => Promise<void>): Promise<void> {
-    try {
-      errorMessage = '';
-      await task();
-    } catch (error) {
-      notifyError(parseError(error));
-    }
-  }
-
   async function selectBoard(boardId: string): Promise<void> {
-    await safely(async () => {
+    await notify.safely(async () => {
       activeBoardIdStore.set(boardId);
-      await loadBoardData(boardId);
-    });
-  }
-
-  function openBoardCreate(): void {
-    editingBoardId = null;
-    boardNameInput = '';
-    boardModalOpen = true;
-  }
-
-  function openBoardEdit(board: Board): void {
-    editingBoardId = board.id;
-    boardNameInput = board.name;
-    boardModalOpen = true;
-  }
-
-  async function submitBoard(): Promise<void> {
-    await safely(async () => {
-      if (editingBoardId) {
-        await boardService.rename(editingBoardId, boardNameInput);
-        notifySuccess('Board updated.');
-      } else {
-        const created = await boardService.create(boardNameInput);
-        activeBoardIdStore.set(created.id);
-        notifySuccess('Board created.');
-      }
-
-      boardModalOpen = false;
-      await reloadBoards(false);
-    });
-  }
-
-  function requestDeleteBoard(board: Board): void {
-    confirmState = {
-      open: true,
-      title: 'Delete board',
-      message: `Delete ${board.name}? All its columns and cards will also be deleted.`,
-      action: async () => {
-        await boardService.remove(board.id);
-        await reloadBoards(true);
-        notifySuccess('Board deleted.');
-      },
-    };
-  }
-
-  function openColumnCreate(): void {
-    if (!$activeBoardIdStore) {
-      return;
-    }
-    editingColumnId = null;
-    columnTitleInput = '';
-    columnModalOpen = true;
-  }
-
-  function openColumnEdit(column: Column): void {
-    editingColumnId = column.id;
-    columnTitleInput = column.title;
-    columnModalOpen = true;
-  }
-
-  async function submitColumn(): Promise<void> {
-    await safely(async () => {
-      if (!$activeBoardIdStore) {
-        return;
-      }
-
-      if (editingColumnId) {
-        await columnService.rename(editingColumnId, columnTitleInput);
-        notifySuccess('Column updated.');
-      } else {
-        await columnService.create($activeBoardIdStore, columnTitleInput);
-        notifySuccess('Column created.');
-      }
-
-      columnModalOpen = false;
-      await loadBoardData($activeBoardIdStore);
-    });
-  }
-
-  function requestDeleteColumn(column: Column): void {
-    confirmState = {
-      open: true,
-      title: 'Delete column',
-      message: `Delete ${column.title}? All cards in this column will be removed.`,
-      action: async () => {
-        await columnService.remove(column.id);
-        if ($activeBoardIdStore) {
-          await loadBoardData($activeBoardIdStore);
-        }
-        notifySuccess('Column deleted.');
-      },
-    };
-  }
-
-  async function moveColumn(column: Column, direction: 'left' | 'right'): Promise<void> {
-    await safely(async () => {
-      if (!$activeBoardIdStore) {
-        return;
-      }
-
-      const sorted = [...$columnsStore].sort((a, b) => a.order - b.order);
-      const index = sorted.findIndex((item) => item.id === column.id);
-      const nextIndex = direction === 'left' ? index - 1 : index + 1;
-      if (index < 0 || nextIndex < 0 || nextIndex >= sorted.length) {
-        return;
-      }
-
-      const [moved] = sorted.splice(index, 1);
-      sorted.splice(nextIndex, 0, moved);
-      await columnService.reorder(
-        $activeBoardIdStore,
-        sorted.map((item) => item.id),
-      );
-      await loadBoardData($activeBoardIdStore);
-    });
-  }
-
-  function openCardCreate(columnId: string): void {
-    if (!$activeBoardIdStore) {
-      return;
-    }
-
-    cardEditor = {
-      open: true,
-      editingCardId: null,
-      boardId: $activeBoardIdStore,
-      columnId,
-      title: '',
-      description: '',
-      priority: 'medium',
-      tagsText: '',
-      dueDate: '',
-    };
-  }
-
-  function openCardEdit(card: Card): void {
-    cardEditor = {
-      open: true,
-      editingCardId: card.id,
-      boardId: card.boardId,
-      columnId: card.columnId,
-      title: card.title,
-      description: card.description,
-      priority: card.priority,
-      tagsText: card.tags.join(', '),
-      dueDate: card.dueDate ?? '',
-    };
-  }
-
-  function buildOptimisticUpdatedCards(
-    cards: Card[],
-    cardId: string,
-    update: CardUpdate,
-  ): Card[] {
-    const current = cards.find((card) => card.id === cardId);
-    if (!current) {
-      throw new Error(`Optimistic update error: card not found with id ${cardId}`);
-    }
-
-    const normalized = normalizeCardUpdate(update);
-    const now = nowIso();
-    const nextCard: Card = {
-      ...current,
-      title: normalized.title,
-      description: normalized.description,
-      priority: normalized.priority,
-      tags: normalized.tags,
-      dueDate: normalized.dueDate,
-      updatedAt: now,
-    };
-
-    if (current.columnId === normalized.columnId) {
-      return cards.map((card) => (card.id === cardId ? nextCard : card));
-    }
-
-    const remainingCards = cards.filter((card) => card.id !== cardId);
-    const sourceCards = remainingCards
-      .filter((card) => card.columnId === current.columnId)
-      .sort((a, b) => a.order - b.order);
-    const sourceReordered = new Map(
-      sourceCards.map((card, index) => [
-        card.id,
-        { ...card, order: index + 1, updatedAt: now },
-      ]),
-    );
-    const targetMaxOrder = remainingCards
-      .filter((card) => card.columnId === normalized.columnId)
-      .reduce((max, card) => Math.max(max, card.order), 0);
-
-    return [
-      ...remainingCards.map((card) => sourceReordered.get(card.id) ?? card),
-      {
-        ...nextCard,
-        columnId: normalized.columnId,
-        order: targetMaxOrder + 1,
-      },
-    ];
-  }
-
-  async function submitCard(): Promise<void> {
-    await safely(async () => {
-      const tags = cardEditor.tagsText
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter(Boolean);
-
-      if (cardEditor.editingCardId) {
-        const update: CardUpdate = {
-          title: cardEditor.title,
-          description: cardEditor.description,
-          priority: cardEditor.priority,
-          tags,
-          dueDate: cardEditor.dueDate || null,
-          columnId: cardEditor.columnId,
-        };
-
-        const snapshot = $cardsStore;
-        cardsStore.set(buildOptimisticUpdatedCards(snapshot, cardEditor.editingCardId, update));
-        cardEditor.open = false;
-
-        try {
-          await cardService.update(cardEditor.editingCardId, update);
-          notifySuccess('Card updated.');
-        } catch (error) {
-          cardsStore.set(snapshot);
-          cardEditor.open = true;
-          throw error;
-        }
-      } else {
-        const input: CardInput = {
-          boardId: cardEditor.boardId,
-          columnId: cardEditor.columnId,
-          title: cardEditor.title,
-          description: cardEditor.description,
-          priority: cardEditor.priority,
-          tags,
-          dueDate: cardEditor.dueDate || null,
-        };
-
-        await cardService.create(input);
-        notifySuccess('Card created.');
-      }
-
-      cardEditor.open = false;
-      if ($activeBoardIdStore) {
-        await loadBoardData($activeBoardIdStore);
-      }
-    });
-  }
-
-  function requestDeleteCard(card: Card): void {
-    confirmState = {
-      open: true,
-      title: 'Delete card',
-      message: `Delete card ${card.title}?`,
-      action: async () => {
-        await cardService.remove(card.id);
-        if ($activeBoardIdStore) {
-          await loadBoardData($activeBoardIdStore);
-        }
-        notifySuccess('Card deleted.');
-      },
-    };
-  }
-
-  async function dropCard(cardId: string, toColumnId: string, toIndex: number): Promise<void> {
-    await safely(async () => {
-      await cardService.move(cardId, toColumnId, toIndex);
-      if ($activeBoardIdStore) {
-        await loadBoardData($activeBoardIdStore);
-      }
-    });
-  }
-
-  function updateFilters(patch: Partial<CardFilters>): void {
-    filtersStore.update((filters) => ({ ...filters, ...patch }));
-  }
-
-  function toggleViewMode(mode: CardFilters['viewMode']): void {
-    filtersStore.update((filters) => ({ ...filters, viewMode: mode }));
-  }
-
-  function updateSort(field: SortField): void {
-    filtersStore.update((filters) => {
-      const nextDirection =
-        filters.sortField === field ? (filters.sortDirection === 'asc' ? 'desc' : 'asc') : 'asc';
-
-      return {
-        ...filters,
-        sortField: field,
-        sortDirection: nextDirection,
-      };
-    });
-  }
-
-  function resetFilters(): void {
-    filtersStore.set({ ...defaultFilters, viewMode: $filtersStore.viewMode });
-  }
-
-  async function confirmAction(): Promise<void> {
-    if (!confirmState.action) {
-      return;
-    }
-
-    await safely(async () => {
-      await confirmState.action?.();
-      confirmState.open = false;
-      confirmState.action = null;
+      await loader.loadBoardData(boardId);
     });
   }
 </script>
@@ -536,56 +143,50 @@
         </Select.Content>
       </Select.Root>
 
-      <Button type="button" onclick={openBoardCreate}>+ Board</Button>
+      <Button type="button" onclick={boards.openCreate}>+ Board</Button>
 
       {#if activeBoard}
-        <Button type="button" variant="outline" onclick={() => openBoardEdit(activeBoard)}>Rename</Button>
-        <Button type="button" variant="destructive" onclick={() => requestDeleteBoard(activeBoard)}>Delete</Button>
+        <Button type="button" variant="outline" onclick={() => boards.openEdit(activeBoard)}>Edit Board</Button>
       {/if}
-
-      <Button
-        type="button"
-        variant={$filtersStore.viewMode === 'board' ? 'default' : 'outline'}
-        onclick={() => toggleViewMode('board')}
-      >
-        Board View
-      </Button>
-      <Button
-        type="button"
-        variant={$filtersStore.viewMode === 'table' ? 'default' : 'outline'}
-        onclick={() => toggleViewMode('table')}
-      >
-        Table View
-      </Button>
-      <Button type="button" variant="outline" onclick={() => (filterModalOpen = true)}>Filters</Button>
     </div>
   </header>
+
+  {#if activeBoard}
+    <BoardToolbar
+      boardName={activeBoard.name}
+      viewMode={$filtersStore.viewMode}
+      filters={$filtersStore}
+      columns={$columnsStore}
+      {availableTags}
+      onToggleView={filters.toggleView}
+      onFiltersChange={filters.update}
+      onResetFilters={filters.reset}
+    />
+  {/if}
 
   <section class="content-region">
     {#if loading}
       <p class="status">Loading...</p>
-    {:else if errorMessage}
-      <p class="status error">{errorMessage}</p>
     {:else if !$activeBoardIdStore}
       <EmptyState
         title="No boards"
         description="Create your first board to start organizing work."
         actionText="Create Board"
-        onAction={openBoardCreate}
+        onAction={boards.openCreate}
       />
     {:else if $filtersStore.viewMode === 'board'}
       <BoardView
         columns={$columnsStore}
         {cardsByColumn}
-        onAddColumn={openColumnCreate}
-        onMoveColumnLeft={(column) => moveColumn(column, 'left')}
-        onMoveColumnRight={(column) => moveColumn(column, 'right')}
-        onEditColumn={openColumnEdit}
-        onDeleteColumn={requestDeleteColumn}
-        onAddCard={openCardCreate}
-        onEditCard={openCardEdit}
-        onDeleteCard={requestDeleteCard}
-        onDropCard={dropCard}
+        onAddColumn={columns.openCreate}
+        onMoveColumnLeft={(column) => columns.move(column, 'left')}
+        onMoveColumnRight={(column) => columns.move(column, 'right')}
+        onEditColumn={columns.openEdit}
+        onDeleteColumn={columns.requestDelete}
+        onAddCard={cards.openCreate}
+        onEditCard={cards.openEdit}
+        onDeleteCard={cards.requestDelete}
+        onDropCard={cards.drop}
       />
     {:else}
       <TableView
@@ -593,96 +194,100 @@
         columns={$columnsStore}
         sortField={$filtersStore.sortField}
         sortDirection={$filtersStore.sortDirection}
-        onSort={updateSort}
-        onEditCard={openCardEdit}
-        onDeleteCard={requestDeleteCard}
+        onSort={filters.updateSort}
+        onEditCard={cards.openEdit}
+        onDeleteCard={cards.requestDelete}
       />
     {/if}
   </section>
 
   <Modal
-    open={filterModalOpen}
-    title="Filters"
-    onClose={() => (filterModalOpen = false)}
-    width="lg"
-  >
-    <TableToolbar
-      filters={$filtersStore}
-      columns={$columnsStore}
-      {availableTags}
-      onFiltersChange={updateFilters}
-      onReset={resetFilters}
-    />
-  </Modal>
-
-  <Modal
-    open={boardModalOpen}
-    title={editingBoardId ? 'Rename Board' : 'Create Board'}
-    onClose={() => (boardModalOpen = false)}
+    open={boards.modalOpen}
+    title={boards.editingId ? 'Edit Board' : 'Create Board'}
+    onClose={boards.closeModal}
   >
     <form
       class="form"
       onsubmit={(event) => {
         event.preventDefault();
-        void submitBoard();
+        void boards.submit();
       }}
     >
       <label>
         Name
-        <Input bind:value={boardNameInput} required />
+        <Input bind:value={boards.nameInput} required />
       </label>
       <div class="form-actions">
-        <Button type="button" variant="outline" onclick={() => (boardModalOpen = false)}>Cancel</Button>
+        <Button type="button" variant="outline" onclick={boards.closeModal}>Cancel</Button>
         <Button type="submit">Save</Button>
       </div>
     </form>
+
+    {#if boards.editingId}
+      {@const editingBoard = $boardsStore.find((b) => b.id === boards.editingId)}
+      {#if editingBoard}
+        <div class="danger-zone">
+          <p class="danger-zone-label">Danger Zone</p>
+          <Button
+            type="button"
+            variant="destructive"
+            onclick={() => {
+              boards.closeModal();
+              boards.requestDelete(editingBoard);
+            }}
+          >
+            Delete Board
+          </Button>
+        </div>
+      {/if}
+    {/if}
   </Modal>
 
   <Modal
-    open={columnModalOpen}
-    title={editingColumnId ? 'Rename Column' : 'Create Column'}
-    onClose={() => (columnModalOpen = false)}
+    open={columns.modalOpen}
+    title={columns.editingId ? 'Rename Column' : 'Create Column'}
+    onClose={columns.closeModal}
     width="sm"
   >
     <form
       class="form"
       onsubmit={(event) => {
         event.preventDefault();
-        void submitColumn();
+        void columns.submit();
       }}
     >
       <label>
         Title
-        <Input bind:value={columnTitleInput} required />
+        <Input bind:value={columns.titleInput} required />
       </label>
       <div class="form-actions">
-        <Button type="button" variant="outline" onclick={() => (columnModalOpen = false)}>Cancel</Button>
+        <Button type="button" variant="outline" onclick={columns.closeModal}>Cancel</Button>
         <Button type="submit">Save</Button>
       </div>
     </form>
   </Modal>
 
   <Modal
-    open={cardEditor.open}
-    title={cardEditor.editingCardId ? 'Edit Card' : 'Create Card'}
-    onClose={() => (cardEditor.open = false)}
+    open={cards.editor.open}
+    title={cards.editor.editingCardId ? 'Edit Card' : 'Create Card'}
+    onClose={() => (cards.editor.open = false)}
     width="lg"
   >
     <form
       class="form"
       onsubmit={(event) => {
         event.preventDefault();
-        void submitCard();
+        void cards.submit();
       }}
     >
       <label>
         Title
-        <Input bind:value={cardEditor.title} required />
+        <Input bind:value={cards.editor.title} required />
       </label>
 
       <label>
         Description
-        <Textarea rows={4} bind:value={cardEditor.description}></Textarea>
+        <Textarea rows={4} bind:value={cards.editor.description}></Textarea>
       </label>
 
       <div class="grid-2">
@@ -690,10 +295,10 @@
           Priority
           <Select.Root
             type="single"
-            value={cardEditor.priority}
+            value={cards.editor.priority}
             onValueChange={(value) =>
-              (cardEditor = {
-                ...cardEditor,
+              (cards.editor = {
+                ...cards.editor,
                 priority: value as CardPriority,
               })}
           >
@@ -711,10 +316,10 @@
           Status / Column
           <Select.Root
             type="single"
-            value={cardEditor.columnId}
+            value={cards.editor.columnId}
             onValueChange={(value) =>
-              (cardEditor = {
-                ...cardEditor,
+              (cards.editor = {
+                ...cards.editor,
                 columnId: value,
               })}
           >
@@ -731,17 +336,17 @@
       <div class="grid-2">
         <label>
           Tags (comma separated)
-          <Input bind:value={cardEditor.tagsText} placeholder="frontend, bug" />
+          <Input bind:value={cards.editor.tagsText} placeholder="frontend, bug" />
         </label>
 
         <label>
           Due Date
           <DatePicker
-            value={cardEditor.dueDate || null}
+            value={cards.editor.dueDate || null}
             placeholder="Pick due date"
             onValueChange={(value) =>
-              (cardEditor = {
-                ...cardEditor,
+              (cards.editor = {
+                ...cards.editor,
                 dueDate: value ?? '',
               })}
           />
@@ -749,23 +354,20 @@
       </div>
 
       <div class="form-actions">
-        <Button type="button" variant="outline" onclick={() => (cardEditor.open = false)}>Cancel</Button>
+        <Button type="button" variant="outline" onclick={() => (cards.editor.open = false)}>Cancel</Button>
         <Button type="submit">Save</Button>
       </div>
     </form>
   </Modal>
 
   <ConfirmDialog
-    open={confirmState.open}
-    title={confirmState.title}
-    message={confirmState.message}
+    open={confirm.state.open}
+    title={confirm.state.title}
+    message={confirm.state.message}
     confirmText="Delete"
     cancelText="Cancel"
-    onCancel={() => {
-      confirmState.open = false;
-      confirmState.action = null;
-    }}
-    onConfirm={confirmAction}
+    onCancel={confirm.cancel}
+    onConfirm={confirm.confirm}
   />
 
   {#if $toastStore}
@@ -880,6 +482,25 @@
     justify-content: flex-end;
     gap: 0.5rem;
     margin-top: 0.2rem;
+  }
+
+  .danger-zone {
+    margin-top: 1.2rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--destructive);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .danger-zone-label {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--destructive);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
 
   .toast {
