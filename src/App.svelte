@@ -55,6 +55,9 @@
 
   // — app-level state —
   let loading = $state(true);
+  let currentUser = $state<string | null>(null);
+
+  const appVersion = __APP_VERSION__;
 
   const activeBoard = $derived(
     $boardsStore.find((board) => board.id === $activeBoardIdStore) ?? null,
@@ -101,6 +104,9 @@
       await seedIfNeeded();
       await loader.reloadBoards(true);
       initSync();
+
+      const m = (window as any).moxt?.currentMember;
+      if (m) currentUser = m.displayName || m.email || null;
     } catch (error) {
       notify.notifyError(notify.parseError(error));
     } finally {
@@ -124,6 +130,7 @@
   <header class="toolbar">
     <div class="toolbar-title">
       <h1>Moxt Kanban</h1>
+      <span class="version-chip">{appVersion}</span>
       <span class="backend-chip" aria-label="Current backend provider">
         Backend: {backendProviderLabel}
       </span>
@@ -147,6 +154,10 @@
 
       {#if activeBoard}
         <Button type="button" variant="outline" onclick={() => boards.openEdit(activeBoard)}>Edit Board</Button>
+      {/if}
+
+      {#if currentUser}
+        <span class="user-chip" title="Logged in as {currentUser}">{currentUser}</span>
       {/if}
     </div>
   </header>
@@ -413,6 +424,18 @@
     min-width: max-content;
   }
 
+  .version-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.13rem 0.42rem;
+    border: 1px solid var(--border);
+    background: var(--muted);
+    color: var(--muted-foreground);
+    font-size: 0.68rem;
+    font-family: monospace;
+    letter-spacing: 0.01em;
+  }
+
   .backend-chip {
     display: inline-flex;
     align-items: center;
@@ -423,6 +446,20 @@
     font-size: 0.7rem;
     letter-spacing: 0.01em;
     text-transform: lowercase;
+  }
+
+  .user-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.13rem 0.55rem;
+    border: 1px solid var(--border);
+    background: var(--secondary);
+    color: var(--secondary-foreground);
+    font-size: 0.75rem;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .toolbar-actions {
