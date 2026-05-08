@@ -708,16 +708,6 @@
 </main>
 
 <style>
-  :global(body) {
-    position: relative;
-    margin: 0;
-    font-family: 'JetBrains Mono Variable', monospace;
-    background: var(--background);
-    width: 100vw;
-    height: 100vh;
-    overflow: hidden;
-  }
-  
   main {
     height: 100vh;
     height: 100dvh;
