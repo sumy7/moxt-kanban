@@ -22,6 +22,14 @@ export type CardUpdate = {
   columnId: string;
 };
 
+export function normalizeCardUpdate(update: CardUpdate): CardUpdate {
+  return {
+    ...update,
+    title: validateTitle(update.title),
+    description: update.description.trim(),
+  };
+}
+
 function validateTitle(title: string): string {
   const value = title.trim();
   if (!value) {
@@ -97,17 +105,16 @@ export const cardService = {
 
   async update(cardId: string, update: CardUpdate): Promise<void> {
     const card = await getCardOrThrow(cardId);
-
-    const title = validateTitle(update.title);
+    const normalized = normalizeCardUpdate(update);
     const now = nowIso();
     const sourceColumnId = card.columnId;
 
-    if (sourceColumnId !== update.columnId) {
+    if (sourceColumnId !== normalized.columnId) {
       const maxOrder =
         (
           await db.cards
             .where('columnId')
-            .equals(update.columnId)
+            .equals(normalized.columnId)
             .sortBy('order')
         )
           .filter((c) => !c.deletedAt)
@@ -115,12 +122,12 @@ export const cardService = {
 
       await db.transaction('rw', db.cards, async () => {
         await db.cards.update(cardId, {
-          title,
-          description: update.description.trim(),
-          priority: update.priority,
-          tags: update.tags,
-          dueDate: update.dueDate,
-          columnId: update.columnId,
+          title: normalized.title,
+          description: normalized.description,
+          priority: normalized.priority,
+          tags: normalized.tags,
+          dueDate: normalized.dueDate,
+          columnId: normalized.columnId,
           order: maxOrder + 1,
           updatedAt: now,
         });
@@ -131,11 +138,11 @@ export const cardService = {
     }
 
     await db.cards.update(cardId, {
-      title,
-      description: update.description.trim(),
-      priority: update.priority,
-      tags: update.tags,
-      dueDate: update.dueDate,
+      title: normalized.title,
+      description: normalized.description,
+      priority: normalized.priority,
+      tags: normalized.tags,
+      dueDate: normalized.dueDate,
       updatedAt: now,
     });
   },
