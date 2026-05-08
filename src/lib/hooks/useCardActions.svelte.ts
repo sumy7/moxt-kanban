@@ -135,9 +135,10 @@ export function createCardActions({
           columnId: editor.columnId,
         };
 
+        const currentCards = get(cardsStore);
         cardsStore.set(
           buildOptimisticUpdatedCards(
-            get(cardsStore),
+            currentCards,
             editor.editingCardId,
             update,
           ),

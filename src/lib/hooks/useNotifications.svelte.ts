@@ -5,16 +5,20 @@ export function createNotifications() {
   let errorMessage = $state('');
   let successToastTimer: ReturnType<typeof setTimeout> | null = null;
 
+  function clearSuccessToastTimer(): void {
+    if (successToastTimer) {
+      clearTimeout(successToastTimer);
+      successToastTimer = null;
+    }
+  }
+
   function parseError(error: unknown): string {
     if (error instanceof Error) return error.message;
     return 'Unknown error';
   }
 
   function notifySuccess(message: string): void {
-    if (successToastTimer) {
-      clearTimeout(successToastTimer);
-      successToastTimer = null;
-    }
+    clearSuccessToastTimer();
 
     toastStore.set({ type: 'success', message });
 
@@ -28,10 +32,7 @@ export function createNotifications() {
   }
 
   function notifyError(message: string): void {
-    if (successToastTimer) {
-      clearTimeout(successToastTimer);
-      successToastTimer = null;
-    }
+    clearSuccessToastTimer();
     toastStore.set({ type: 'error', message });
   }
 
