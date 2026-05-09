@@ -5,6 +5,8 @@ export function createSvelteTable<TData extends RowData>(
 ): Table<TData> {
 	const table = $state(
 		createTable({
+			// onStateChange is required by TableOptionsResolved; the actual state updates are
+			// handled via the individual onXChange callbacks (onSortingChange, onPaginationChange).
 			onStateChange() {},
 			renderFallbackValue: null,
 			...options,

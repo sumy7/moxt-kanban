@@ -16,6 +16,7 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import type { Card, Column } from '../../types';
 	import { formatDate } from '../../utils/date';
+	import { priorityRank } from '../../utils/sort';
 	import EmptyState from '../shared/EmptyState.svelte';
 	import CardTableActions from './CardTableActions.svelte';
 	import CardTableSortHeader from './CardTableSortHeader.svelte';
@@ -33,7 +34,7 @@
 
 	const columnMap = $derived(new Map(columns.map((col) => [col.id, col.title])));
 
-	const PRIORITY_RANK: Record<string, number> = { low: 0, medium: 1, high: 2, urgent: 3 };
+	const DEFAULT_PAGE_SIZE = 20;
 
 	const columnDefs: ColumnDef<Card>[] = [
 		{
@@ -63,8 +64,8 @@
 		{
 			accessorKey: 'priority',
 			sortingFn: (rowA, rowB) =>
-				(PRIORITY_RANK[rowA.original.priority] ?? 0) -
-				(PRIORITY_RANK[rowB.original.priority] ?? 0),
+				(priorityRank[rowA.original.priority] ?? 0) -
+				(priorityRank[rowB.original.priority] ?? 0),
 			header: ({ column }) =>
 				renderComponent(CardTableSortHeader, {
 					label: 'Priority',
@@ -124,7 +125,7 @@
 	];
 
 	let sorting = $state<SortingState>([]);
-	let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: 20 });
+	let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: DEFAULT_PAGE_SIZE });
 
 	const table = createSvelteTable({
 		get data() {

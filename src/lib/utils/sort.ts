@@ -1,6 +1,6 @@
 import type { Card, CardPriority, SortDirection, SortField } from '../types';
 
-const priorityRank: Record<CardPriority, number> = {
+export const priorityRank: Record<CardPriority, number> = {
   low: 1,
   medium: 2,
   high: 3,
