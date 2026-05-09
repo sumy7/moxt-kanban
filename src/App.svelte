@@ -203,9 +203,6 @@
       <TableView
         cards={visibleCards}
         columns={$columnsStore}
-        sortField={$filtersStore.sortField}
-        sortDirection={$filtersStore.sortDirection}
-        onSort={filters.updateSort}
         onEditCard={cards.openEdit}
         onDeleteCard={cards.requestDelete}
       />

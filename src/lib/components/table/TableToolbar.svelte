@@ -3,7 +3,7 @@
   import DatePicker from '../shared/DatePicker.svelte';
   import { Input } from '$lib/components/ui/input/index.js';
   import * as Select from '$lib/components/ui/select/index.js';
-  import type { CardFilters, CardPriority, Column, SortDirection, SortField } from '../../types';
+  import type { CardFilters, CardPriority, Column } from '../../types';
 
   type Props = {
     filters: CardFilters;
@@ -55,17 +55,6 @@
       .filter(Boolean);
 
     onFiltersChange({ tags });
-  }
-
-  function setSort(sortField: SortField): void {
-    const isCurrent = filters.sortField === sortField;
-    const sortDirection: SortDirection = isCurrent
-      ? filters.sortDirection === 'asc'
-        ? 'desc'
-        : 'asc'
-      : 'asc';
-
-    onFiltersChange({ sortField, sortDirection });
   }
 </script>
 
@@ -152,12 +141,6 @@
       {/each}
     </datalist>
     <Button type="button" variant="outline" onclick={applyTagInput}>Apply Tags</Button>
-  </div>
-
-  <div class="inline-group">
-    <Button type="button" variant="outline" onclick={() => setSort('updatedAt')}>Sort Updated</Button>
-    <Button type="button" variant="outline" onclick={() => setSort('dueDate')}>Sort Due</Button>
-    <Button type="button" variant="outline" onclick={() => setSort('priority')}>Sort Priority</Button>
   </div>
 </div>
 

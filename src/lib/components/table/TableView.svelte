@@ -1,135 +1,238 @@
 <script lang="ts">
-  import { Badge } from '$lib/components/ui/badge/index.js';
-  import { Button } from '$lib/components/ui/button/index.js';
-  import * as Table from '$lib/components/ui/table/index.js';
-  import type { Card, Column, SortDirection, SortField } from '../../types';
-  import EmptyState from '../shared/EmptyState.svelte';
-  import { formatDate } from '../../utils/date';
+	import {
+		type ColumnDef,
+		type PaginationState,
+		type SortingState,
+		getCoreRowModel,
+		getPaginationRowModel,
+		getSortedRowModel,
+	} from '@tanstack/table-core';
+	import {
+		FlexRender,
+		createSvelteTable,
+		renderComponent,
+	} from '$lib/components/ui/data-table/index.js';
+	import * as Table from '$lib/components/ui/table/index.js';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import type { Card, Column } from '../../types';
+	import { formatDate } from '../../utils/date';
+	import EmptyState from '../shared/EmptyState.svelte';
+	import CardTableActions from './CardTableActions.svelte';
+	import CardTableSortHeader from './CardTableSortHeader.svelte';
+	import CardPriorityCell from './CardPriorityCell.svelte';
+	import CardTitleCell from './CardTitleCell.svelte';
 
-  type Props = {
-    cards: Card[];
-    columns: Column[];
-    sortField: SortField;
-    sortDirection: SortDirection;
-    onSort: (field: SortField) => void;
-    onEditCard: (card: Card) => void;
-    onDeleteCard: (card: Card) => void;
-  };
+	type Props = {
+		cards: Card[];
+		columns: Column[];
+		onEditCard: (card: Card) => void;
+		onDeleteCard: (card: Card) => void;
+	};
 
-  let { cards, columns, sortField, sortDirection, onSort, onEditCard, onDeleteCard }: Props =
-    $props();
+	let { cards, columns, onEditCard, onDeleteCard }: Props = $props();
 
-  const columnMap = $derived(new Map(columns.map((column) => [column.id, column.title])));
+	const columnMap = $derived(new Map(columns.map((col) => [col.id, col.title])));
 
-  // 列定义
-  interface ColumnHeader {
-    id: string;
-    label: string;
-    sortable: boolean;
-  }
+	const PRIORITY_RANK: Record<string, number> = { low: 0, medium: 1, high: 2, urgent: 3 };
 
-  const columnHeaders: ColumnHeader[] = [
-    { id: 'title', label: 'Title', sortable: true },
-    { id: 'column', label: 'Status', sortable: true },
-    { id: 'priority', label: 'Priority', sortable: true },
-    { id: 'tags', label: 'Tags', sortable: false },
-    { id: 'dueDate', label: 'Due Date', sortable: true },
-    { id: 'updatedAt', label: 'Updated', sortable: true },
-    { id: 'createdAt', label: 'Created', sortable: true },
-  ];
+	const columnDefs: ColumnDef<Card>[] = [
+		{
+			accessorKey: 'title',
+			header: ({ column }) =>
+				renderComponent(CardTableSortHeader, {
+					label: 'Title',
+					onclick: column.getToggleSortingHandler(),
+					sorted: column.getIsSorted(),
+				}),
+			cell: ({ row }) =>
+				renderComponent(CardTitleCell, {
+					title: row.original.title,
+					description: row.original.description,
+				}),
+		},
+		{
+			id: 'column',
+			accessorFn: (card) => columnMap.get(card.columnId) ?? 'Unknown',
+			header: ({ column }) =>
+				renderComponent(CardTableSortHeader, {
+					label: 'Status',
+					onclick: column.getToggleSortingHandler(),
+					sorted: column.getIsSorted(),
+				}),
+		},
+		{
+			accessorKey: 'priority',
+			sortingFn: (rowA, rowB) =>
+				(PRIORITY_RANK[rowA.original.priority] ?? 0) -
+				(PRIORITY_RANK[rowB.original.priority] ?? 0),
+			header: ({ column }) =>
+				renderComponent(CardTableSortHeader, {
+					label: 'Priority',
+					onclick: column.getToggleSortingHandler(),
+					sorted: column.getIsSorted(),
+				}),
+			cell: ({ row }) => renderComponent(CardPriorityCell, { priority: row.original.priority }),
+		},
+		{
+			id: 'tags',
+			accessorFn: (card) => (card.tags ?? []).join(', ') || '-',
+			header: 'Tags',
+			enableSorting: false,
+		},
+		{
+			accessorKey: 'dueDate',
+			header: ({ column }) =>
+				renderComponent(CardTableSortHeader, {
+					label: 'Due Date',
+					onclick: column.getToggleSortingHandler(),
+					sorted: column.getIsSorted(),
+				}),
+			cell: ({ row }) => formatDate(row.original.dueDate),
+		},
+		{
+			accessorKey: 'updatedAt',
+			header: ({ column }) =>
+				renderComponent(CardTableSortHeader, {
+					label: 'Updated',
+					onclick: column.getToggleSortingHandler(),
+					sorted: column.getIsSorted(),
+				}),
+			cell: ({ row }) => formatDate(row.original.updatedAt),
+		},
+		{
+			accessorKey: 'createdAt',
+			header: ({ column }) =>
+				renderComponent(CardTableSortHeader, {
+					label: 'Created',
+					onclick: column.getToggleSortingHandler(),
+					sorted: column.getIsSorted(),
+				}),
+			cell: ({ row }) => formatDate(row.original.createdAt),
+		},
+		{
+			id: 'actions',
+			header: 'Actions',
+			enableSorting: false,
+			enableHiding: false,
+			cell: ({ row }) =>
+				renderComponent(CardTableActions, {
+					card: row.original,
+					onEdit: onEditCard,
+					onDelete: onDeleteCard,
+				}),
+		},
+	];
 
-  function handleColumnSort(colId: string): void {
-    onSort(colId as SortField);
-  }
+	let sorting = $state<SortingState>([]);
+	let pagination = $state<PaginationState>({ pageIndex: 0, pageSize: 20 });
 
-  function getSortIndicator(colId: string): string {
-    if (sortField !== colId) {
-      return '';
-    }
-
-    return sortDirection === 'desc' ? '↓' : '↑';
-  }
+	const table = createSvelteTable({
+		get data() {
+			return cards;
+		},
+		columns: columnDefs,
+		state: {
+			get sorting() {
+				return sorting;
+			},
+			get pagination() {
+				return pagination;
+			},
+		},
+		getCoreRowModel: getCoreRowModel(),
+		getSortedRowModel: getSortedRowModel(),
+		getPaginationRowModel: getPaginationRowModel(),
+		onSortingChange: (updater) => {
+			sorting = typeof updater === 'function' ? updater(sorting) : updater;
+		},
+		onPaginationChange: (updater) => {
+			pagination = typeof updater === 'function' ? updater(pagination) : updater;
+		},
+		renderFallbackValue: null,
+	});
 </script>
 
 {#if cards.length === 0}
-  <EmptyState title="No matching cards" description="Try changing search or filters." />
+	<EmptyState title="No matching cards" description="Try changing search or filters." />
 {:else}
-  <div class="table-wrap">
-    <Table.Root class="w-full border bg-card">
-      <Table.Header>
-        <Table.Row>
-          {#each columnHeaders as header (header.id)}
-            <Table.Head
-              class={header.sortable ? 'cursor-pointer select-none hover:bg-muted/50' : ''}
-              onclick={() => header.sortable && handleColumnSort(header.id)}
-            >
-              <div class="flex items-center gap-1">
-                <span>{header.label}</span>
-                {#if header.sortable && getSortIndicator(header.id)}
-                  <span class="text-xs">{getSortIndicator(header.id)}</span>
-                {/if}
-              </div>
-            </Table.Head>
-          {/each}
-          <Table.Head class="w-24">Actions</Table.Head>
-        </Table.Row>
-      </Table.Header>
-      <Table.Body>
-        {#each cards as card (card.id)}
-          <Table.Row>
-            <Table.Cell class="max-w-xs">
-              <div class="font-medium">{card.title}</div>
-              <div class="mt-1 text-xs text-muted-foreground">
-                {card.description || 'No description'}
-              </div>
-            </Table.Cell>
-            <Table.Cell>
-              {columnMap.get(card.columnId) ?? 'Unknown'}
-            </Table.Cell>
-            <Table.Cell>
-              <Badge
-                variant={
-                  card.priority === 'urgent'
-                    ? 'destructive'
-                    : card.priority === 'high'
-                      ? 'secondary'
-                      : 'outline'
-                }
-              >
-                {card.priority}
-              </Badge>
-            </Table.Cell>
-            <Table.Cell>
-              {(card.tags ?? []).join(', ') || '-'}
-            </Table.Cell>
-            <Table.Cell>
-              {formatDate(card.dueDate)}
-            </Table.Cell>
-            <Table.Cell>
-              {formatDate(card.updatedAt)}
-            </Table.Cell>
-            <Table.Cell>
-              {formatDate(card.createdAt)}
-            </Table.Cell>
-            <Table.Cell class="w-24">
-              <div class="flex gap-1">
-                <Button type="button" size="xs" variant="outline" onclick={() => onEditCard(card)}>Edit</Button>
-                <Button type="button" size="xs" variant="destructive" onclick={() => onDeleteCard(card)}>Delete</Button>
-              </div>
-            </Table.Cell>
-          </Table.Row>
-        {/each}
-      </Table.Body>
-    </Table.Root>
-  </div>
+	<div class="table-wrap">
+		<div class="rounded-md border">
+			<Table.Root>
+				<Table.Header>
+					{#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
+						<Table.Row>
+							{#each headerGroup.headers as header (header.id)}
+								<Table.Head class="whitespace-nowrap">
+									{#if !header.isPlaceholder}
+										<FlexRender
+											content={header.column.columnDef.header}
+											context={header.getContext()}
+										/>
+									{/if}
+								</Table.Head>
+							{/each}
+						</Table.Row>
+					{/each}
+				</Table.Header>
+				<Table.Body>
+					{#each table.getRowModel().rows as row (row.id)}
+						<Table.Row>
+							{#each row.getVisibleCells() as cell (cell.id)}
+								<Table.Cell>
+									<FlexRender
+										content={cell.column.columnDef.cell}
+										context={cell.getContext()}
+									/>
+								</Table.Cell>
+							{/each}
+						</Table.Row>
+					{:else}
+						<Table.Row>
+							<Table.Cell colspan={columnDefs.length} class="h-24 text-center">
+								No results.
+							</Table.Cell>
+						</Table.Row>
+					{/each}
+				</Table.Body>
+			</Table.Root>
+		</div>
+
+		<div class="flex items-center justify-between pt-3">
+			<span class="text-muted-foreground text-sm">
+				{table.getFilteredRowModel().rows.length} card(s) total
+			</span>
+			<div class="flex items-center gap-2">
+				<Button
+					variant="outline"
+					size="sm"
+					onclick={() => table.previousPage()}
+					disabled={!table.getCanPreviousPage()}
+				>
+					Previous
+				</Button>
+				<span class="text-sm">
+					Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+				</span>
+				<Button
+					variant="outline"
+					size="sm"
+					onclick={() => table.nextPage()}
+					disabled={!table.getCanNextPage()}
+				>
+					Next
+				</Button>
+			</div>
+		</div>
+	</div>
 {/if}
 
 <style>
-  .table-wrap {
-    width: 100%;
-    height: 100%;
-    min-height: 0;
-    overflow: auto;
-    display: block;
-  }
+	.table-wrap {
+		width: 100%;
+		height: 100%;
+		min-height: 0;
+		overflow: auto;
+		display: flex;
+		flex-direction: column;
+	}
 </style>
