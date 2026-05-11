@@ -51,18 +51,14 @@ export function TableView({
     [cards, columnMap]
   )
 
-  function getSortIndicator(colId: string): string {
-    if (sortField !== colId) return ""
-    return sortDirection === "desc" ? "↓" : "↑"
-  }
-
   const tableColumns = useMemo<ColumnDef<(Card & { column: string })>[]>(
     () => [
       {
         accessorKey: "title",
         header: () => (
           <Button variant="ghost" onClick={() => onSort("title")}>
-            Title {getSortIndicator("title")}
+            Title{" "}
+            {sortField === "title" ? (sortDirection === "desc" ? "↓" : "↑") : ""}
           </Button>
         ),
         cell: ({ row }) => (
@@ -78,7 +74,12 @@ export function TableView({
         accessorKey: "column",
         header: () => (
           <Button variant="ghost" onClick={() => onSort("column")}>
-            Status {getSortIndicator("column")}
+            Status{" "}
+            {sortField === "column"
+              ? sortDirection === "desc"
+                ? "↓"
+                : "↑"
+              : ""}
           </Button>
         ),
       },
@@ -86,7 +87,12 @@ export function TableView({
         accessorKey: "priority",
         header: () => (
           <Button variant="ghost" onClick={() => onSort("priority")}>
-            Priority {getSortIndicator("priority")}
+            Priority{" "}
+            {sortField === "priority"
+              ? sortDirection === "desc"
+                ? "↓"
+                : "↑"
+              : ""}
           </Button>
         ),
         cell: ({ row }) => (
@@ -112,7 +118,12 @@ export function TableView({
         accessorKey: "dueDate",
         header: () => (
           <Button variant="ghost" onClick={() => onSort("dueDate")}>
-            Due Date {getSortIndicator("dueDate")}
+            Due Date{" "}
+            {sortField === "dueDate"
+              ? sortDirection === "desc"
+                ? "↓"
+                : "↑"
+              : ""}
           </Button>
         ),
         cell: ({ row }) => formatDate(row.original.dueDate),
@@ -121,7 +132,12 @@ export function TableView({
         accessorKey: "updatedAt",
         header: () => (
           <Button variant="ghost" onClick={() => onSort("updatedAt")}>
-            Updated {getSortIndicator("updatedAt")}
+            Updated{" "}
+            {sortField === "updatedAt"
+              ? sortDirection === "desc"
+                ? "↓"
+                : "↑"
+              : ""}
           </Button>
         ),
         cell: ({ row }) => formatDate(row.original.updatedAt),
@@ -130,7 +146,12 @@ export function TableView({
         accessorKey: "createdAt",
         header: () => (
           <Button variant="ghost" onClick={() => onSort("createdAt")}>
-            Created {getSortIndicator("createdAt")}
+            Created{" "}
+            {sortField === "createdAt"
+              ? sortDirection === "desc"
+                ? "↓"
+                : "↑"
+              : ""}
           </Button>
         ),
         cell: ({ row }) => formatDate(row.original.createdAt),
@@ -160,7 +181,7 @@ export function TableView({
         ),
       },
     ],
-    [getSortIndicator, onDeleteCard, onEditCard, onSort]
+    [onDeleteCard, onEditCard, onSort, sortDirection, sortField]
   )
 
   const table = useReactTable({
@@ -179,36 +200,36 @@ export function TableView({
   }
 
   return (
-      <div className="table-wrap">
-        <Table className="w-full border bg-card">
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} className="w-auto">
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows.map((row) => (
-              <TableRow key={row.id}>
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+    <div className="table-wrap">
+      <Table className="w-full border bg-card">
+        <TableHeader>
+          {table.getHeaderGroups().map((headerGroup) => (
+            <TableRow key={headerGroup.id}>
+              {headerGroup.headers.map((header) => (
+                <TableHead key={header.id} className="w-auto">
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(
+                        header.column.columnDef.header,
+                        header.getContext()
+                      )}
+                </TableHead>
+              ))}
+            </TableRow>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {table.getRowModel().rows.map((row) => (
+            <TableRow key={row.id}>
+              {row.getVisibleCells().map((cell) => (
+                <TableCell key={cell.id}>
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   )
 }
