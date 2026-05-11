@@ -6,13 +6,12 @@
 
 | 层级     | 技术                                                                            |
 | -------- | ------------------------------------------------------------------------------- |
-| 框架     | [Svelte 5](https://svelte.dev)                                                  |
+| 框架     | [React 19](https://react.dev)                                                   |
 | 构建     | [Rsbuild](https://rsbuild.rs)                                                   |
 | 语言     | TypeScript                                                                      |
 | 样式     | Tailwind CSS v4                                                                 |
-| UI 组件  | [shadcn-svelte](https://www.shadcn-svelte.com) / [Bits UI](https://bits-ui.com) |
 | 本地存储 | [Dexie](https://dexie.org)（IndexedDB）                                         |
-| 图标     | Lucide / Phosphor                                                               |
+| 图标     | 暂无（后续按 React 组件库补充）                                                   |
 
 ## 功能
 
@@ -41,11 +40,17 @@ src/
     components/     # UI 组件（board/、table/、shared/、ui/）
     db/             # 数据库适配器（Dexie / Moxt 双适配）
     services/       # 业务逻辑（boardService、columnService、cardService、filterService、syncService）
-    stores/         # Svelte stores（boards、columns、cards、filters、ui）
+    stores/         # 旧 Svelte 状态管理代码（待迁移到 React）
     types/          # TypeScript 类型定义
     utils/          # 工具函数
-  App.svelte        # 应用入口
+  App.tsx           # 应用入口
 ```
+
+## React 迁移说明
+
+- 当前已切换到 React + Rsbuild React 插件，应用入口为 `src/App.tsx`
+- `src/lib/components`、`src/lib/hooks`、`src/lib/stores` 与 `syncService` 仍是旧 Svelte 实现，处于增量迁移阶段
+- `pnpm run typecheck` 目前覆盖 React 入口与已迁移的 TypeScript 业务层代码
 
 ## 快速开始
 
@@ -68,5 +73,5 @@ pnpm run preview
 ```bash
 pnpm run lint          # ESLint 检查
 pnpm run format        # Prettier 格式化
-pnpm run svelte-check  # TypeScript / Svelte 类型检查
+pnpm run typecheck     # TypeScript 类型检查
 ```

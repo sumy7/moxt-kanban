@@ -1,8 +1,8 @@
-import { writable } from 'svelte/store';
+import { createStore } from "./store"
 
 type Toast = {
-  type: 'success' | 'error';
-  message: string;
-};
+  type: "success" | "error"
+  message: string
+}
 
-export const toastStore = writable<Toast | null>(null);
+export const toastStore = createStore<Toast | null>(null)
