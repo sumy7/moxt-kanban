@@ -11,7 +11,7 @@
 | 语言     | TypeScript                                                                      |
 | 样式     | Tailwind CSS v4                                                                 |
 | 本地存储 | [Dexie](https://dexie.org)（IndexedDB）                                         |
-| 图标     | -                                                                               |
+| 图标     | 暂无（后续按 React 组件库补充）                                                   |
 
 ## 功能
 
@@ -40,11 +40,17 @@ src/
     components/     # UI 组件（board/、table/、shared/、ui/）
     db/             # 数据库适配器（Dexie / Moxt 双适配）
     services/       # 业务逻辑（boardService、columnService、cardService、filterService、syncService）
-    stores/         # Svelte stores（boards、columns、cards、filters、ui）
+    stores/         # 旧 Svelte 状态管理代码（待迁移到 React）
     types/          # TypeScript 类型定义
     utils/          # 工具函数
   App.tsx           # 应用入口
 ```
+
+## React 迁移说明
+
+- 当前已切换到 React + Rsbuild React 插件，应用入口为 `src/App.tsx`
+- `src/lib/components`、`src/lib/hooks`、`src/lib/stores` 与 `syncService` 仍是旧 Svelte 实现，处于增量迁移阶段
+- `pnpm run typecheck` 目前覆盖 React 入口与已迁移的 TypeScript 业务层代码
 
 ## 快速开始
 
