@@ -71,7 +71,9 @@ export default function App() {
       <header className="toolbar">
         <div className="toolbar-title">
           <h1>Moxt Kanban</h1>
-          <span className="chip">v{__APP_VERSION__}</span>
+          <span className="chip" aria-label="Application version">
+            v{__APP_VERSION__}
+          </span>
           <span className="chip">Backend: {backendLabel}</span>
           {currentUser ? <span className="chip">{currentUser}</span> : null}
         </div>
@@ -84,7 +86,9 @@ export default function App() {
         </p>
 
         <div className="create-row">
+          <label htmlFor="board-name">New board name</label>
           <input
+            id="board-name"
             value={boardName}
             onChange={(event) => setBoardName(event.target.value)}
             placeholder="New board name"

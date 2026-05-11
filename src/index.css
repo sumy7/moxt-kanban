@@ -206,7 +206,12 @@ textarea:focus-visible {
 
 .create-row {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
+}
+
+.create-row label {
+  font-size: 0.85rem;
 }
 
 .create-row input {
