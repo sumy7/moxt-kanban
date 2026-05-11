@@ -1,0 +1,14 @@
+{
+  "description": "Moxt Kanban miniapp project config",
+  "packOptions": {
+    "ignore": []
+  },
+  "setting": {
+    "es6": true,
+    "postcss": true,
+    "minified": true
+  },
+  "compileType": "miniapp",
+  "appid": "touristappid",
+  "projectname": "moxt-kanban"
+}

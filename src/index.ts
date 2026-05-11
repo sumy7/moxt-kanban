@@ -1,12 +1,14 @@
-import { mount } from 'svelte';
-import App from './App.svelte';
+import { createElement, StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import App from './App';
 import './index.css';
 import { initializeDatabase } from './lib/db/database';
 
 await initializeDatabase();
 
-const app = mount(App, {
-  target: document.querySelector('#root') || document.body,
-});
+const target = document.querySelector('#root') ?? document.body;
+const root = createRoot(target);
 
-export default app;
+root.render(
+  createElement(StrictMode, null, createElement(App)),
+);

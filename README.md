@@ -6,13 +6,12 @@
 
 | 层级     | 技术                                                                            |
 | -------- | ------------------------------------------------------------------------------- |
-| 框架     | [Svelte 5](https://svelte.dev)                                                  |
+| 框架     | [React 19](https://react.dev)                                                   |
 | 构建     | [Rsbuild](https://rsbuild.rs)                                                   |
 | 语言     | TypeScript                                                                      |
 | 样式     | Tailwind CSS v4                                                                 |
-| UI 组件  | [shadcn-svelte](https://www.shadcn-svelte.com) / [Bits UI](https://bits-ui.com) |
 | 本地存储 | [Dexie](https://dexie.org)（IndexedDB）                                         |
-| 图标     | Lucide / Phosphor                                                               |
+| 图标     | -                                                                               |
 
 ## 功能
 
@@ -44,7 +43,7 @@ src/
     stores/         # Svelte stores（boards、columns、cards、filters、ui）
     types/          # TypeScript 类型定义
     utils/          # 工具函数
-  App.svelte        # 应用入口
+  App.tsx           # 应用入口
 ```
 
 ## 快速开始
@@ -68,5 +67,5 @@ pnpm run preview
 ```bash
 pnpm run lint          # ESLint 检查
 pnpm run format        # Prettier 格式化
-pnpm run svelte-check  # TypeScript / Svelte 类型检查
+pnpm run typecheck     # TypeScript 类型检查
 ```

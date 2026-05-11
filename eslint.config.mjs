@@ -1,5 +1,4 @@
 import js from '@eslint/js';
-import svelte from 'eslint-plugin-svelte';
 import globals from 'globals';
 import ts from 'typescript-eslint';
 
@@ -7,22 +6,24 @@ import ts from 'typescript-eslint';
 export default [
   js.configs.recommended,
   ...ts.configs.recommended,
-  ...svelte.configs['flat/recommended'],
   {
     languageOptions: {
       globals: {
         ...globals.browser,
         ...globals.node,
+        __APP_VERSION__: 'readonly',
       },
     },
   },
   {
-    files: ['**/*.svelte'],
-    languageOptions: {
-      parserOptions: {
-        parser: ts.parser,
-      },
-    },
+    ignores: [
+      'dist/',
+      'src/**/*.svelte',
+      'src/**/*.svelte.ts',
+      'src/lib/components/**',
+      'src/lib/hooks/**',
+      'src/lib/stores/**',
+      'src/lib/services/syncService.ts',
+    ],
   },
-  { ignores: ['dist/'] },
 ];

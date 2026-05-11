@@ -9,14 +9,13 @@
     "format": "prettier --write .",
     "lint": "eslint .",
     "preview": "rsbuild preview",
-    "svelte-check": "svelte-check --tsconfig ./tsconfig.json"
+    "typecheck": "tsc --noEmit --project ./tsconfig.json"
   },
   "dependencies": {
-    "@lucide/svelte": "^1.3.0",
     "clsx": "^2.1.1",
     "dexie": "^4.4.2",
-    "shadcn-svelte": "^1.2.7",
-    "svelte": "^5.55.5",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
     "tailwind-merge": "^3.5.0",
     "tailwind-variants": "^3.2.2",
     "tw-animate-css": "^1.4.0"
@@ -25,16 +24,14 @@
     "@eslint/js": "^10.0.1",
     "@internationalized/date": "^3.12.1",
     "@rsbuild/core": "^2.0.3",
-    "@rsbuild/plugin-svelte": "^1.1.1",
+    "@rsbuild/plugin-react": "^2.0.0",
     "@tailwindcss/postcss": "^4.2.4",
     "@types/node": "^25.6.2",
-    "bits-ui": "^2.18.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "eslint": "^10.2.1",
-    "eslint-plugin-svelte": "^3.17.1",
     "globals": "^17.5.0",
-    "phosphor-svelte": "^3.1.0",
     "prettier": "^3.8.3",
-    "svelte-check": "^4.4.7",
     "tailwindcss": "^4.2.4",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.0"

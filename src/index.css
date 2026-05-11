@@ -1,7 +1,6 @@
 @import url('https://cdn.jsdelivr.net/npm/@fontsource-variable/jetbrains-mono@5.2.8/index.css');
 @import 'tailwindcss';
 @import "tw-animate-css";
-@import "shadcn-svelte/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -161,4 +160,64 @@ textarea:focus-visible {
 	html {
 		@apply font-mono;
   }
+}
+
+.app {
+  height: 100vh;
+  height: 100dvh;
+  width: 100vw;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.toolbar {
+  border: 1px solid var(--border);
+  background: var(--card);
+  padding: 0.5rem 0.75rem;
+}
+
+.toolbar-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.chip {
+  border: 1px solid var(--border);
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  font-size: 0.75rem;
+  padding: 0.15rem 0.45rem;
+}
+
+.content {
+  border: 1px solid var(--border);
+  background: var(--card);
+  padding: 0.75rem;
+  overflow: auto;
+}
+
+.hint {
+  margin-top: 0;
+}
+
+.create-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.create-row input {
+  min-width: 220px;
+}
+
+.board-list {
+  margin: 0.8rem 0 0;
+  padding-left: 1rem;
+}
+
+.error {
+  color: var(--destructive);
 }
