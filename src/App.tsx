@@ -2,16 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { seedIfNeeded } from './lib/db/seed';
 import { db } from './lib/db/database';
 import { boardService } from './lib/services/boardService';
-import type { Board } from './lib/types';
-
-type MemberProfile = {
-  displayName?: string;
-  email?: string;
-};
-
-type MoxtBridge = {
-  currentMember?: MemberProfile;
-};
+import type { Board, MoxtBridge } from './lib/types';
 
 export default function App() {
   const [loading, setLoading] = useState(true);

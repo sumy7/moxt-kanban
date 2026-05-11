@@ -7,3 +7,4 @@ export type {
   SortField,
   ViewMode,
 } from './filters';
+export type { MemberProfile, MoxtBridge } from './moxt';
