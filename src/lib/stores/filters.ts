@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { createStore } from './store';
 import type { CardFilters } from '../types';
 
 export const defaultFilters: CardFilters = {
@@ -14,4 +14,4 @@ export const defaultFilters: CardFilters = {
   viewMode: 'board',
 };
 
-export const filtersStore = writable<CardFilters>(defaultFilters);
+export const filtersStore = createStore<CardFilters>(defaultFilters);

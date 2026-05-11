@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { createStore } from './store';
 import type { Column } from '../types';
 
-export const columnsStore = writable<Column[]>([]);
+export const columnsStore = createStore<Column[]>([]);

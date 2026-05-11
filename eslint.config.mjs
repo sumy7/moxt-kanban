@@ -1,30 +1,23 @@
-import js from '@eslint/js';
-import globals from 'globals';
-import ts from 'typescript-eslint';
+import js from '@eslint/js'
+import globals from 'globals'
+import reactHooks from 'eslint-plugin-react-hooks'
+import reactRefresh from 'eslint-plugin-react-refresh'
+import tseslint from 'typescript-eslint'
+import { defineConfig, globalIgnores } from 'eslint/config'
 
-/** @type {import('eslint').Linter.Config[]} */
-export default [
-  js.configs.recommended,
-  ...ts.configs.recommended,
+export default defineConfig([
+  globalIgnores(['dist']),
   {
-    languageOptions: {
-      globals: {
-        ...globals.browser,
-        ...globals.node,
-      },
-    },
-  },
-  {
-    files: ['**/*.ts', '**/*.tsx'],
-    rules: {
-      'no-undef': 'off',
-    },
-  },
-  {
-    ignores: [
-      'dist/',
-      'src/**/*.svelte',
-      'src/**/*.svelte.ts',
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      js.configs.recommended,
+      tseslint.configs.recommended,
+      reactHooks.configs.flat.recommended,
+      reactRefresh.configs.vite,
     ],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: globals.browser,
+    },
   },
-];
+])

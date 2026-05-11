@@ -7,11 +7,11 @@
       "skillPath": "skills/rsbuild-best-practices/SKILL.md",
       "computedHash": "2f1de26a27367666c49d16b114d31dbf78dc71f02b3e0784b1e3bf90f4e6e90b"
     },
-    "shadcn-svelte": {
-      "source": "antstanley/shadcn-svelte-skill",
+    "shadcn": {
+      "source": "shadcn/ui",
       "sourceType": "github",
-      "skillPath": "shadcn-svelte/SKILL.md",
-      "computedHash": "49c05564c35311177bb97d4ded920fcaa2c5f11c13e6b5a85ae9910281bcb7b5"
+      "skillPath": "skills/shadcn/SKILL.md",
+      "computedHash": "80a6226e78f6d1fe464214ae0ef449d49d8ffaa3e7704f011e9b418c678ad4d1"
     }
   }
 }

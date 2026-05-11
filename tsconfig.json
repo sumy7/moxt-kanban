@@ -16,8 +16,7 @@
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "paths": {
-      "$lib": ["./src/lib"],
-      "$lib/*": ["./src/lib/*"]
+      "@/*": ["./src/*"]
     },
 
     /* type checking */
@@ -27,10 +26,6 @@
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/env.d.ts"],
   "exclude": [
     "src/**/*.svelte",
-    "src/**/*.svelte.ts",
-    "src/lib/components/**",
-    "src/lib/hooks/**",
-    "src/lib/stores/**",
-    "src/lib/services/syncService.ts"
+    "src/**/*.svelte.ts"
   ]
 }

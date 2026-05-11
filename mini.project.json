@@ -1,7 +1,0 @@
-{
-  "projectName": "moxt-kanban",
-  "description": "Moxt Kanban miniapp runtime configuration",
-  "entry": "/",
-  "appConfig": "app.config.json",
-  "sitemap": "sitemap.json"
-}
