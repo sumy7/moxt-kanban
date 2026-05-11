@@ -1,17 +1,17 @@
-import { createStore } from './store';
-import type { CardFilters } from '../types';
+import { createStore } from "./store"
+import type { CardFilters } from "../types"
 
 export const defaultFilters: CardFilters = {
-  searchText: '',
+  searchText: "",
   priorities: [],
   tags: [],
   columnIds: [],
-  dueDateMode: 'all',
+  dueDateMode: "all",
   dueDateFrom: null,
   dueDateTo: null,
-  sortField: 'updatedAt',
-  sortDirection: 'desc',
-  viewMode: 'board',
-};
+  sortField: "updatedAt",
+  sortDirection: "desc",
+  viewMode: "board",
+}
 
-export const filtersStore = createStore<CardFilters>(defaultFilters);
+export const filtersStore = createStore<CardFilters>(defaultFilters)
