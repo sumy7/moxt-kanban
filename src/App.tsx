@@ -36,6 +36,8 @@ import { EmptyState } from "./lib/components/shared/EmptyState"
 import { DatePicker } from "./lib/components/shared/DatePicker"
 import type { WindowWithMoxt } from "./lib/types"
 
+import "./app.css"
+
 export default function App() {
   const [loading, setLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<string | null>(null)
