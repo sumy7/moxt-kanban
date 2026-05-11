@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { seedIfNeeded } from './lib/db/seed';
 import { db } from './lib/db/database';
 import { boardService } from './lib/services/boardService';
-import type { Board, MoxtBridge } from './lib/types';
+import type { Board, WindowWithMoxt } from './lib/types';
 
 export default function App() {
   const [loading, setLoading] = useState(true);
@@ -28,7 +28,7 @@ export default function App() {
         await seedIfNeeded();
         await refreshBoards();
 
-        const bridge = (window as Window & { moxt?: MoxtBridge }).moxt;
+        const bridge = (window as WindowWithMoxt).moxt;
         const member = bridge?.currentMember;
         if (member) {
           setCurrentUser(member.displayName ?? member.email ?? null);

@@ -6,3 +6,7 @@ export type MemberProfile = {
 export type MoxtBridge = {
   currentMember?: MemberProfile;
 };
+
+export type WindowWithMoxt = Window & {
+  moxt?: MoxtBridge;
+};
