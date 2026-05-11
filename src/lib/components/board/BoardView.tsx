@@ -118,7 +118,7 @@ function SortableCard({ card, onEditCard, onDeleteCard }: SortableCardProps) {
       }}
       {...attributes}
       {...listeners}
-      className={`board-card ${priorityClass(card.priority)}${isDragging ? " dragging" : ""}`}
+      className={`board-card ${priorityClass(card.priority)}${isDragging ? "dragging" : ""}`}
     >
       <CardBody
         card={card}
@@ -154,7 +154,9 @@ export function BoardView({
 }: BoardViewProps) {
   const [activeCard, setActiveCard] = useState<Card | null>(null)
   // localItems: col.id -> ordered card ids; null when not dragging
-  const [localItems, setLocalItems] = useState<Record<string, string[]> | null>(null)
+  const [localItems, setLocalItems] = useState<Record<string, string[]> | null>(
+    null
+  )
   // Track the column the active card is over for border highlight
   const [overColumnId, setOverColumnId] = useState<string | null>(null)
   // Stable ref to avoid stale closures in callbacks
@@ -170,7 +172,7 @@ export function BoardView({
       setLocalItems(null)
       localItemsRef.current = null
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards])
 
   const sensors = useSensors(
@@ -249,9 +251,8 @@ export function BoardView({
       destIndex = current[destColId]?.length ?? 0
     } else {
       destColId =
-        Object.keys(current).find((colId) =>
-          current[colId].includes(overId)
-        ) ?? sourceColId
+        Object.keys(current).find((colId) => current[colId].includes(overId)) ??
+        sourceColId
       destIndex = current[destColId]?.indexOf(overId) ?? 0
       if (destIndex < 0) destIndex = 0
     }
@@ -346,7 +347,7 @@ export function BoardView({
           return (
             <div
               key={column.id}
-              className={`board-column${isOver ? " drop-target" : ""}`}
+              className={`board-column${isOver ? "drop-target" : ""}`}
             >
               <div className="column-header">
                 <span className="column-title">{column.title}</span>
