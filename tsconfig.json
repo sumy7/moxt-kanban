@@ -24,13 +24,13 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": [
-    "src/env.d.ts",
-    "src/index.ts",
-    "src/App.tsx",
-    "src/lib/db/**/*.ts",
-    "src/lib/services/boardService.ts",
-    "src/lib/types/**/*.ts",
-    "src/lib/utils/**/*.ts"
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/env.d.ts"],
+  "exclude": [
+    "src/**/*.svelte",
+    "src/**/*.svelte.ts",
+    "src/lib/components/**",
+    "src/lib/hooks/**",
+    "src/lib/stores/**",
+    "src/lib/services/syncService.ts"
   ]
 }

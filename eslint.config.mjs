@@ -20,10 +20,6 @@ export default [
       'dist/',
       'src/**/*.svelte',
       'src/**/*.svelte.ts',
-      'src/lib/components/**',
-      'src/lib/hooks/**',
-      'src/lib/stores/**',
-      'src/lib/services/syncService.ts',
     ],
   },
 ];
