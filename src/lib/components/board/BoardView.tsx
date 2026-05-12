@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react"
+import { useState, useCallback, useRef, useEffect, useMemo } from "react"
 import {
   DndContext,
   DragOverlay,
@@ -175,7 +175,7 @@ export function BoardView({
   )
 
   const columnIdSet = new Set(columns.map((c) => c.id))
-  const cardMap = new Map(cards.map((c) => [c.id, c]))
+  const cardMap = useMemo(() => new Map(cards.map((c) => [c.id, c])), [cards])
   const activeCard = activeCardId ? (cardMap.get(activeCardId) ?? null) : null
 
   function buildItemsMap(): Record<string, string[]> {
@@ -189,14 +189,14 @@ export function BoardView({
     return map
   }
 
-  function findColumnByCardId(
-    items: Record<string, string[]>,
-    cardId: string
-  ): string | null {
-    for (const colId of Object.keys(items)) {
-      if (items[colId].includes(cardId)) return colId
+  function buildCardToColumnMap(items: Record<string, string[]>): Map<string, string> {
+    const map = new Map<string, string>()
+    for (const [colId, cardIds] of Object.entries(items)) {
+      for (const cardId of cardIds) {
+        map.set(cardId, colId)
+      }
     }
-    return null
+    return map
   }
 
   const collisionDetection = useCallback<CollisionDetection>(
@@ -228,15 +228,16 @@ export function BoardView({
 
     const activeId = String(active.id)
     const overId = String(over.id)
+    const cardToColumn = buildCardToColumnMap(current)
 
     if (activeId === overId) return
 
-    const sourceColId = findColumnByCardId(current, activeId)
+    const sourceColId = cardToColumn.get(activeId)
     if (!sourceColId) return
 
     const destColId = columnIdSet.has(overId)
       ? overId
-      : findColumnByCardId(current, overId)
+      : cardToColumn.get(overId)
     if (!destColId) return
 
     setOverColumnId(destColId)
