@@ -265,7 +265,7 @@ export function BoardView({
       const fromIndex = items.indexOf(activeId)
       if (fromIndex === -1) return
       const adjustedDestIndex =
-        destIndex > fromIndex ? Math.max(destIndex - 1, 0) : destIndex
+        destIndex > fromIndex ? destIndex - 1 : destIndex
       if (fromIndex === adjustedDestIndex) return
       items.splice(fromIndex, 1)
       items.splice(adjustedDestIndex, 0, activeId)
