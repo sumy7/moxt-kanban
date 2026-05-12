@@ -158,6 +158,7 @@ export function BoardView({
   )
   const [overColumnId, setOverColumnId] = useState<string | null>(null)
   const dragItemsRef = useRef<Record<string, string[]> | null>(null)
+  const dragCardToColumnRef = useRef<Map<string, string> | null>(null)
   const pendingClearRef = useRef(false)
 
   useEffect(() => {
@@ -165,6 +166,7 @@ export function BoardView({
       pendingClearRef.current = false
       setDragItems(null)
       dragItemsRef.current = null
+      dragCardToColumnRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards])
@@ -175,6 +177,7 @@ export function BoardView({
   )
 
   const columnIdSet = new Set(columns.map((c) => c.id))
+  // Shared lookup for render and drag overlay; avoids rebuilding in each column render.
   const cardMap = useMemo(() => new Map(cards.map((c) => [c.id, c])), [cards])
   const activeCard = activeCardId ? (cardMap.get(activeCardId) ?? null) : null
 
@@ -217,6 +220,7 @@ export function BoardView({
     const map = buildItemsMap()
     setDragItems(map)
     dragItemsRef.current = map
+    dragCardToColumnRef.current = buildCardToColumnMap(map)
   }
 
   function handleDragOver({ active, over }: DragOverEvent) {
@@ -228,7 +232,8 @@ export function BoardView({
 
     const activeId = String(active.id)
     const overId = String(over.id)
-    const cardToColumn = buildCardToColumnMap(current)
+    const cardToColumn =
+      dragCardToColumnRef.current ?? buildCardToColumnMap(current)
 
     if (activeId === overId) return
 
@@ -276,6 +281,7 @@ export function BoardView({
 
     dragItemsRef.current = next
     setDragItems(next)
+    dragCardToColumnRef.current = buildCardToColumnMap(next)
   }
 
   function handleDragEnd({ active }: DragEndEvent) {
@@ -293,6 +299,7 @@ export function BoardView({
     } else {
       setDragItems(null)
       dragItemsRef.current = null
+      dragCardToColumnRef.current = null
     }
     setActiveCardId(null)
     setOverColumnId(null)
@@ -303,6 +310,7 @@ export function BoardView({
     setDragItems(null)
     setOverColumnId(null)
     dragItemsRef.current = null
+    dragCardToColumnRef.current = null
   }
 
   if (columns.length === 0) {
