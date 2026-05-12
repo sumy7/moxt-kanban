@@ -17,6 +17,7 @@ import {
 import {
   SortableContext,
   useSortable,
+  arrayMove,
   verticalListSortingStrategy,
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable"
@@ -131,7 +132,6 @@ function SortableCard({ card, onEditCard, onDeleteCard }: SortableCardProps) {
 
 type ColumnCardsProps = {
   columnId: string
-  isOver: boolean
   children: React.ReactNode
 }
 
@@ -152,25 +152,19 @@ export function BoardView({
   onDeleteCard,
   onDrop,
 }: BoardViewProps) {
-  const [activeCard, setActiveCard] = useState<Card | null>(null)
-  // localItems: col.id -> ordered card ids; null when not dragging
-  const [localItems, setLocalItems] = useState<Record<string, string[]> | null>(
+  const [activeCardId, setActiveCardId] = useState<string | null>(null)
+  const [dragItems, setDragItems] = useState<Record<string, string[]> | null>(
     null
   )
-  // Track the column the active card is over for border highlight
   const [overColumnId, setOverColumnId] = useState<string | null>(null)
-  // Stable ref to avoid stale closures in callbacks
-  const localItemsRef = useRef<Record<string, string[]> | null>(null)
-  // When true, clear localItems on next cards-prop change (after async onDrop resolves)
+  const dragItemsRef = useRef<Record<string, string[]> | null>(null)
   const pendingClearRef = useRef(false)
 
-  // Once the parent cards prop reflects the committed drop, clear the local snapshot
-  // so we stop overriding the source-of-truth.
   useEffect(() => {
     if (pendingClearRef.current) {
       pendingClearRef.current = false
-      setLocalItems(null)
-      localItemsRef.current = null
+      setDragItems(null)
+      dragItemsRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards])
@@ -181,6 +175,8 @@ export function BoardView({
   )
 
   const columnIdSet = new Set(columns.map((c) => c.id))
+  const cardMap = new Map(cards.map((c) => [c.id, c]))
+  const activeCard = activeCardId ? (cardMap.get(activeCardId) ?? null) : null
 
   function buildItemsMap(): Record<string, string[]> {
     const map: Record<string, string[]> = {}
@@ -193,7 +189,16 @@ export function BoardView({
     return map
   }
 
-  // Prefer card hits over column hits; fall back to rect intersection
+  function findColumnByCardId(
+    items: Record<string, string[]>,
+    cardId: string
+  ): string | null {
+    for (const colId of Object.keys(items)) {
+      if (items[colId].includes(cardId)) return colId
+    }
+    return null
+  }
+
   const collisionDetection = useCallback<CollisionDetection>(
     (args) => {
       const hits = pointerWithin(args)
@@ -208,14 +213,14 @@ export function BoardView({
   )
 
   function handleDragStart({ active }: DragStartEvent) {
-    setActiveCard(cards.find((c) => c.id === active.id) ?? null)
+    setActiveCardId(String(active.id))
     const map = buildItemsMap()
-    setLocalItems(map)
-    localItemsRef.current = map
+    setDragItems(map)
+    dragItemsRef.current = map
   }
 
   function handleDragOver({ active, over }: DragOverEvent) {
-    const current = localItemsRef.current
+    const current = dragItemsRef.current
     if (!over || !current) {
       setOverColumnId(null)
       return
@@ -224,66 +229,56 @@ export function BoardView({
     const activeId = String(active.id)
     const overId = String(over.id)
 
-    // Update over-column highlight
-    if (columnIdSet.has(overId)) {
-      setOverColumnId(overId)
-    } else {
-      const destCol = Object.keys(current).find((colId) =>
-        current[colId].includes(overId)
-      )
-      setOverColumnId(destCol ?? null)
-    }
-
     if (activeId === overId) return
 
-    // Find source column
-    const sourceColId = Object.keys(current).find((colId) =>
-      current[colId].includes(activeId)
-    )
+    const sourceColId = findColumnByCardId(current, activeId)
     if (!sourceColId) return
 
-    // Find destination column and index
-    let destColId: string
-    let destIndex: number
+    const destColId = columnIdSet.has(overId)
+      ? overId
+      : findColumnByCardId(current, overId)
+    if (!destColId) return
 
-    if (columnIdSet.has(overId)) {
-      destColId = overId
-      destIndex = current[destColId]?.length ?? 0
-    } else {
-      destColId =
-        Object.keys(current).find((colId) => current[colId].includes(overId)) ??
-        sourceColId
-      destIndex = current[destColId]?.indexOf(overId) ?? 0
-      if (destIndex < 0) destIndex = 0
-    }
+    setOverColumnId(destColId)
 
     let next: Record<string, string[]>
 
     if (sourceColId === destColId) {
-      // Reorder within same column
-      const items = [...current[sourceColId]]
+      if (columnIdSet.has(overId)) return
+      const items = current[sourceColId]
       const fromIndex = items.indexOf(activeId)
-      if (fromIndex === -1) return
-      const adjustedDestIndex =
-        destIndex > fromIndex ? destIndex - 1 : destIndex
-      if (fromIndex === adjustedDestIndex) return
-      items.splice(fromIndex, 1)
-      items.splice(adjustedDestIndex, 0, activeId)
-      next = { ...current, [sourceColId]: items }
+      const toIndex = items.indexOf(overId)
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return
+      next = { ...current, [sourceColId]: arrayMove(items, fromIndex, toIndex) }
     } else {
-      // Move to a different column
-      const sourceItems = current[sourceColId].filter((id) => id !== activeId)
-      const destItems = [...(current[destColId] ?? [])]
-      destItems.splice(destIndex, 0, activeId)
-      next = { ...current, [sourceColId]: sourceItems, [destColId]: destItems }
+      const sourceItems = current[sourceColId]
+      const targetItems = current[destColId] ?? []
+      const sourceIndex = sourceItems.indexOf(activeId)
+      if (sourceIndex < 0) return
+
+      let toIndex = targetItems.length
+      if (!columnIdSet.has(overId)) {
+        const overIndex = targetItems.indexOf(overId)
+        toIndex = overIndex < 0 ? targetItems.length : overIndex
+      }
+
+      const nextSourceItems = sourceItems.filter((id) => id !== activeId)
+      const nextTargetItems = [...targetItems]
+      nextTargetItems.splice(toIndex, 0, activeId)
+
+      next = {
+        ...current,
+        [sourceColId]: nextSourceItems,
+        [destColId]: nextTargetItems,
+      }
     }
 
-    localItemsRef.current = next
-    setLocalItems(next)
+    dragItemsRef.current = next
+    setDragItems(next)
   }
 
   function handleDragEnd({ active }: DragEndEvent) {
-    const final = localItemsRef.current
+    const final = dragItemsRef.current
     if (final) {
       const activeId = String(active.id)
       const destColId = Object.keys(final).find((colId) =>
@@ -293,22 +288,20 @@ export function BoardView({
         const toIndex = final[destColId].indexOf(activeId)
         onDrop(activeId, destColId, toIndex < 0 ? 0 : toIndex)
       }
-      // Keep localItems showing the final layout until cards prop catches up.
-      // The useEffect on `cards` will clear it once the async update lands.
       pendingClearRef.current = true
     } else {
-      setLocalItems(null)
-      localItemsRef.current = null
+      setDragItems(null)
+      dragItemsRef.current = null
     }
-    setActiveCard(null)
+    setActiveCardId(null)
     setOverColumnId(null)
   }
 
   function handleDragCancel() {
-    setActiveCard(null)
-    setLocalItems(null)
+    setActiveCardId(null)
+    setDragItems(null)
     setOverColumnId(null)
-    localItemsRef.current = null
+    dragItemsRef.current = null
   }
 
   if (columns.length === 0) {
@@ -331,16 +324,13 @@ export function BoardView({
     >
       <div className="board-view">
         {columns.map((column) => {
-          // During drag use localItems order; otherwise derive from cards prop
-          const itemIds = localItems
-            ? (localItems[column.id] ?? [])
+          const itemIds = dragItems
+            ? (dragItems[column.id] ?? [])
             : cards
                 .filter((c) => c.columnId === column.id)
                 .sort((a, b) => a.order - b.order)
                 .map((c) => c.id)
 
-          // Map IDs back to card objects (excluding the dragging card from count)
-          const cardMap = new Map(cards.map((c) => [c.id, c]))
           const colCards = itemIds
             .map((id) => cardMap.get(id))
             .filter((c): c is Card => c != null)
@@ -357,7 +347,7 @@ export function BoardView({
                 <span className="column-count">{colCards.length}</span>
               </div>
 
-              <ColumnCards columnId={column.id} isOver={isOver}>
+              <ColumnCards columnId={column.id}>
                 <SortableContext
                   items={itemIds}
                   strategy={verticalListSortingStrategy}
