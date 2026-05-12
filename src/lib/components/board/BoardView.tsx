@@ -118,7 +118,7 @@ function SortableCard({ card, onEditCard, onDeleteCard }: SortableCardProps) {
       }}
       {...attributes}
       {...listeners}
-      className={`board-card ${priorityClass(card.priority)}${isDragging ? "dragging" : ""}`}
+      className={`board-card ${priorityClass(card.priority)}${isDragging ? " dragging" : ""}`}
     >
       <CardBody
         card={card}
@@ -263,9 +263,12 @@ export function BoardView({
       // Reorder within same column
       const items = [...current[sourceColId]]
       const fromIndex = items.indexOf(activeId)
-      if (fromIndex === -1 || fromIndex === destIndex) return
+      if (fromIndex === -1) return
+      const adjustedDestIndex =
+        destIndex > fromIndex ? Math.max(destIndex - 1, 0) : destIndex
+      if (fromIndex === adjustedDestIndex) return
       items.splice(fromIndex, 1)
-      items.splice(destIndex, 0, activeId)
+      items.splice(adjustedDestIndex, 0, activeId)
       next = { ...current, [sourceColId]: items }
     } else {
       // Move to a different column

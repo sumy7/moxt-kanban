@@ -56,7 +56,7 @@ export function TableView({
       {
         accessorKey: "title",
         header: () => (
-          <Button variant="ghost" onClick={() => onSort("title")}>
+          <Button type="button" variant="ghost" onClick={() => onSort("title")}>
             Title{" "}
             {sortField === "title" ? (sortDirection === "desc" ? "↓" : "↑") : ""}
           </Button>
@@ -73,7 +73,7 @@ export function TableView({
       {
         accessorKey: "column",
         header: () => (
-          <Button variant="ghost" onClick={() => onSort("column")}>
+          <Button type="button" variant="ghost" onClick={() => onSort("column")}>
             Status{" "}
             {sortField === "column"
               ? sortDirection === "desc"
@@ -86,7 +86,11 @@ export function TableView({
       {
         accessorKey: "priority",
         header: () => (
-          <Button variant="ghost" onClick={() => onSort("priority")}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onSort("priority")}
+          >
             Priority{" "}
             {sortField === "priority"
               ? sortDirection === "desc"
@@ -117,7 +121,7 @@ export function TableView({
       {
         accessorKey: "dueDate",
         header: () => (
-          <Button variant="ghost" onClick={() => onSort("dueDate")}>
+          <Button type="button" variant="ghost" onClick={() => onSort("dueDate")}>
             Due Date{" "}
             {sortField === "dueDate"
               ? sortDirection === "desc"
@@ -131,7 +135,11 @@ export function TableView({
       {
         accessorKey: "updatedAt",
         header: () => (
-          <Button variant="ghost" onClick={() => onSort("updatedAt")}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onSort("updatedAt")}
+          >
             Updated{" "}
             {sortField === "updatedAt"
               ? sortDirection === "desc"
@@ -145,7 +153,11 @@ export function TableView({
       {
         accessorKey: "createdAt",
         header: () => (
-          <Button variant="ghost" onClick={() => onSort("createdAt")}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onSort("createdAt")}
+          >
             Created{" "}
             {sortField === "createdAt"
               ? sortDirection === "desc"
@@ -187,6 +199,7 @@ export function TableView({
   const table = useReactTable({
     data: tableCards,
     columns: tableColumns,
+    getRowId: (row) => row.id,
     getCoreRowModel: getCoreRowModel(),
   })
 
@@ -220,7 +233,7 @@ export function TableView({
         </TableHeader>
         <TableBody>
           {table.getRowModel().rows.map((row) => (
-            <TableRow key={row.id}>
+            <TableRow key={row.original.id}>
               {row.getVisibleCells().map((cell) => (
                 <TableCell key={cell.id}>
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
