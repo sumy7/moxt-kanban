@@ -225,15 +225,14 @@ export function BoardView({
 
   function handleDragOver({ active, over }: DragOverEvent) {
     const current = dragItemsRef.current
-    if (!over || !current) {
+    const cardToColumn = dragCardToColumnRef.current
+    if (!over || !current || !cardToColumn) {
       setOverColumnId(null)
       return
     }
 
     const activeId = String(active.id)
     const overId = String(over.id)
-    const cardToColumn =
-      dragCardToColumnRef.current ?? buildCardToColumnMap(current)
 
     if (activeId === overId) return
 
