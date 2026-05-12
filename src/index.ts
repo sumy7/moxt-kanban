@@ -1,14 +1,13 @@
-import { createElement, StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
-import App from './App';
-import './index.css';
-import { initializeDatabase } from './lib/db/database';
+import { createElement, StrictMode } from "react"
+import { createRoot } from "react-dom/client"
+import App from "./App"
+import { initializeDatabase } from "./lib/db/database"
 
-await initializeDatabase();
+import "./index.css"
 
-const target = document.querySelector('#root') ?? document.body;
-const root = createRoot(target);
+await initializeDatabase()
 
-root.render(
-  createElement(StrictMode, null, createElement(App)),
-);
+const target = document.querySelector("#root") ?? document.body
+const root = createRoot(target)
+
+root.render(createElement(StrictMode, null, createElement(App)))

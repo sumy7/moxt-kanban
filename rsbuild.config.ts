@@ -1,10 +1,10 @@
-import { execSync } from 'node:child_process';
-import { defineConfig } from '@rsbuild/core';
-import { pluginReact } from '@rsbuild/plugin-react';
-import pkg from './package.json';
+import { execSync } from "node:child_process"
+import { defineConfig } from "@rsbuild/core"
+import { pluginReact } from "@rsbuild/plugin-react"
+import pkg from "./package.json"
 
-const gitHash = execSync('git rev-parse --short HEAD').toString().trim();
-const appVersion = `${pkg.version}(${gitHash})`;
+const gitHash = execSync("git rev-parse --short HEAD").toString().trim()
+const appVersion = `${pkg.version}(${gitHash})`
 
 // Docs: https://rsbuild.rs/config/
 export default defineConfig({
@@ -15,11 +15,6 @@ export default defineConfig({
     },
   },
   html: {
-    title: 'Moxt Kanban',
-    inject: 'body',
+    title: "Moxt Kanban",
   },
-  output: {
-    inlineScripts: true,
-    inlineStyles: true,
-  },
-});
+})

@@ -1,6 +1,12 @@
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
+  type ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+} from "@tanstack/react-table"
+import {
   Table,
   TableBody,
   TableCell,
@@ -11,22 +17,7 @@ import {
 import type { Card, Column, SortDirection, SortField } from "../../types"
 import { EmptyState } from "../shared/EmptyState"
 import { formatDate } from "../../utils/date"
-
-interface ColumnHeader {
-  id: string
-  label: string
-  sortable: boolean
-}
-
-const COLUMN_HEADERS: ColumnHeader[] = [
-  { id: "title", label: "Title", sortable: true },
-  { id: "column", label: "Status", sortable: true },
-  { id: "priority", label: "Priority", sortable: true },
-  { id: "tags", label: "Tags", sortable: false },
-  { id: "dueDate", label: "Due Date", sortable: true },
-  { id: "updatedAt", label: "Updated", sortable: true },
-  { id: "createdAt", label: "Created", sortable: true },
-]
+import { useMemo } from "react"
 
 type TableViewProps = {
   cards: Card[]
@@ -47,12 +38,170 @@ export function TableView({
   onEditCard,
   onDeleteCard,
 }: TableViewProps) {
-  const columnMap = new Map(columns.map((col) => [col.id, col.title]))
+  const columnMap = useMemo(
+    () => new Map(columns.map((col) => [col.id, col.title])),
+    [columns]
+  )
+  const tableCards = useMemo(
+    () =>
+      cards.map((card) => ({
+        ...card,
+        column: columnMap.get(card.columnId) ?? "Unknown",
+      })),
+    [cards, columnMap]
+  )
 
-  function getSortIndicator(colId: string): string {
-    if (sortField !== colId) return ""
-    return sortDirection === "desc" ? "↓" : "↑"
-  }
+  const tableColumns = useMemo<ColumnDef<(Card & { column: string })>[]>(
+    () => [
+      {
+        accessorKey: "title",
+        header: () => (
+          <Button type="button" variant="ghost" onClick={() => onSort("title")}>
+            Title{" "}
+            {sortField === "title" ? (sortDirection === "desc" ? "↓" : "↑") : ""}
+          </Button>
+        ),
+        cell: ({ row }) => (
+          <div className="max-w-xs">
+            <div className="font-medium">{row.original.title}</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {row.original.description || "No description"}
+            </div>
+          </div>
+        ),
+      },
+      {
+        accessorKey: "column",
+        header: () => (
+          <Button type="button" variant="ghost" onClick={() => onSort("column")}>
+            Status{" "}
+            {sortField === "column"
+              ? sortDirection === "desc"
+                ? "↓"
+                : "↑"
+              : ""}
+          </Button>
+        ),
+      },
+      {
+        accessorKey: "priority",
+        header: () => (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onSort("priority")}
+          >
+            Priority{" "}
+            {sortField === "priority"
+              ? sortDirection === "desc"
+                ? "↓"
+                : "↑"
+              : ""}
+          </Button>
+        ),
+        cell: ({ row }) => (
+          <Badge
+            variant={
+              row.original.priority === "urgent"
+                ? "destructive"
+                : row.original.priority === "high"
+                  ? "secondary"
+                  : "outline"
+            }
+          >
+            {row.original.priority}
+          </Badge>
+        ),
+      },
+      {
+        accessorKey: "tags",
+        header: "Tags",
+        cell: ({ row }) => (row.original.tags ?? []).join(", ") || "-",
+      },
+      {
+        accessorKey: "dueDate",
+        header: () => (
+          <Button type="button" variant="ghost" onClick={() => onSort("dueDate")}>
+            Due Date{" "}
+            {sortField === "dueDate"
+              ? sortDirection === "desc"
+                ? "↓"
+                : "↑"
+              : ""}
+          </Button>
+        ),
+        cell: ({ row }) => formatDate(row.original.dueDate),
+      },
+      {
+        accessorKey: "updatedAt",
+        header: () => (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onSort("updatedAt")}
+          >
+            Updated{" "}
+            {sortField === "updatedAt"
+              ? sortDirection === "desc"
+                ? "↓"
+                : "↑"
+              : ""}
+          </Button>
+        ),
+        cell: ({ row }) => formatDate(row.original.updatedAt),
+      },
+      {
+        accessorKey: "createdAt",
+        header: () => (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onSort("createdAt")}
+          >
+            Created{" "}
+            {sortField === "createdAt"
+              ? sortDirection === "desc"
+                ? "↓"
+                : "↑"
+              : ""}
+          </Button>
+        ),
+        cell: ({ row }) => formatDate(row.original.createdAt),
+      },
+      {
+        id: "actions",
+        header: "Actions",
+        cell: ({ row }) => (
+          <div className="flex gap-1">
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              onClick={() => onEditCard(row.original)}
+            >
+              Edit
+            </Button>
+            <Button
+              type="button"
+              size="xs"
+              variant="destructive"
+              onClick={() => onDeleteCard(row.original)}
+            >
+              Delete
+            </Button>
+          </div>
+        ),
+      },
+    ],
+    [onDeleteCard, onEditCard, onSort, sortDirection, sortField]
+  )
+
+  const table = useReactTable({
+    data: tableCards,
+    columns: tableColumns,
+    getRowId: (row) => row.id,
+    getCoreRowModel: getCoreRowModel(),
+  })
 
   if (cards.length === 0) {
     return (
@@ -67,79 +216,29 @@ export function TableView({
     <div className="table-wrap">
       <Table className="w-full border bg-card">
         <TableHeader>
-          <TableRow>
-            {COLUMN_HEADERS.map((header) => (
-              <TableHead
-                key={header.id}
-                className={
-                  header.sortable
-                    ? "cursor-pointer select-none hover:bg-muted/50"
-                    : ""
-                }
-                onClick={() =>
-                  header.sortable && onSort(header.id as SortField)
-                }
-              >
-                <div className="flex items-center gap-1">
-                  <span>{header.label}</span>
-                  {header.sortable && getSortIndicator(header.id) ? (
-                    <span className="text-xs">
-                      {getSortIndicator(header.id)}
-                    </span>
-                  ) : null}
-                </div>
-              </TableHead>
-            ))}
-            <TableHead className="w-24">Actions</TableHead>
-          </TableRow>
+          {table.getHeaderGroups().map((headerGroup) => (
+            <TableRow key={headerGroup.id}>
+              {headerGroup.headers.map((header) => (
+                <TableHead key={header.id} className="w-auto">
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(
+                        header.column.columnDef.header,
+                        header.getContext()
+                      )}
+                </TableHead>
+              ))}
+            </TableRow>
+          ))}
         </TableHeader>
         <TableBody>
-          {cards.map((card) => (
-            <TableRow key={card.id}>
-              <TableCell className="max-w-xs">
-                <div className="font-medium">{card.title}</div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  {card.description || "No description"}
-                </div>
-              </TableCell>
-              <TableCell>{columnMap.get(card.columnId) ?? "Unknown"}</TableCell>
-              <TableCell>
-                <Badge
-                  variant={
-                    card.priority === "urgent"
-                      ? "destructive"
-                      : card.priority === "high"
-                        ? "secondary"
-                        : "outline"
-                  }
-                >
-                  {card.priority}
-                </Badge>
-              </TableCell>
-              <TableCell>{(card.tags ?? []).join(", ") || "-"}</TableCell>
-              <TableCell>{formatDate(card.dueDate)}</TableCell>
-              <TableCell>{formatDate(card.updatedAt)}</TableCell>
-              <TableCell>{formatDate(card.createdAt)}</TableCell>
-              <TableCell className="w-24">
-                <div className="flex gap-1">
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="outline"
-                    onClick={() => onEditCard(card)}
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="destructive"
-                    onClick={() => onDeleteCard(card)}
-                  >
-                    Delete
-                  </Button>
-                </div>
-              </TableCell>
+          {table.getRowModel().rows.map((row) => (
+            <TableRow key={row.original.id}>
+              {row.getVisibleCells().map((cell) => (
+                <TableCell key={cell.id}>
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </TableCell>
+              ))}
             </TableRow>
           ))}
         </TableBody>
