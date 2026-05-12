@@ -129,9 +129,14 @@ export default function App() {
       <header className="toolbar">
         <div className="toolbar-title">
           <h1>Moxt Kanban</h1>
-          <span className="chip version-chip" aria-label="Application version">
-            v{__APP_VERSION__}
-          </span>
+          {window.__APP_VERSION__ && (
+            <span
+              className="chip version-chip"
+              aria-label="Application version"
+            >
+              v{window.__APP_VERSION__}
+            </span>
+          )}
           <span className="chip backend-chip">Backend: {backendLabel}</span>
           {currentUser ? (
             <span className="chip user-chip">{currentUser}</span>

@@ -9,12 +9,16 @@ const appVersion = `${pkg.version}(${gitHash})`
 // Docs: https://rsbuild.rs/config/
 export default defineConfig({
   plugins: [pluginReact()],
-  source: {
-    define: {
-      __APP_VERSION__: JSON.stringify(appVersion),
-    },
+  server: {
+    base: "/moxt-kanban",
   },
   html: {
     title: "Moxt Kanban",
+    tags: [
+      {
+        tag: "script",
+        children: `window.__APP_VERSION__ = ${JSON.stringify(appVersion)};`,
+      },
+    ],
   },
 })
