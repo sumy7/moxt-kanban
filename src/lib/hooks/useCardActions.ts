@@ -46,6 +46,50 @@ type Deps = {
   ) => void
 }
 
+function buildOptimisticMovedCards(
+  cards: Card[],
+  cardId: string,
+  toColumnId: string,
+  toIndex: number,
+): Card[] {
+  const card = cards.find((c) => c.id === cardId)
+  if (!card) return cards
+
+  const now = nowIso()
+  const isWithinColumn = card.columnId === toColumnId
+
+  const sourceCards = cards
+    .filter((c) => c.columnId === card.columnId && !c.deletedAt)
+    .sort((a, b) => a.order - b.order)
+  const targetCards = isWithinColumn
+    ? sourceCards
+    : cards
+        .filter((c) => c.columnId === toColumnId && !c.deletedAt)
+        .sort((a, b) => a.order - b.order)
+
+  const sourceWithoutMoving = sourceCards.filter((c) => c.id !== cardId)
+  const targetWithoutMoving = isWithinColumn
+    ? sourceWithoutMoving
+    : targetCards.filter((c) => c.id !== cardId)
+
+  const insertIndex = Math.max(0, Math.min(toIndex, targetWithoutMoving.length))
+  const movedCard: Card = { ...card, columnId: toColumnId, updatedAt: now }
+  const newTargetList = [...targetWithoutMoving]
+  newTargetList.splice(insertIndex, 0, movedCard)
+
+  const updatedMap = new Map<string, Card>()
+  newTargetList.forEach((c, i) =>
+    updatedMap.set(c.id, { ...c, order: i + 1, updatedAt: now }),
+  )
+  if (!isWithinColumn) {
+    sourceWithoutMoving.forEach((c, i) =>
+      updatedMap.set(c.id, { ...c, order: i + 1, updatedAt: now }),
+    )
+  }
+
+  return cards.map((c) => updatedMap.get(c.id) ?? c)
+}
+
 function buildOptimisticUpdatedCards(
   cards: Card[],
   cardId: string,
@@ -197,10 +241,21 @@ export function useCardActions({
       toColumnId: string,
       toIndex: number
     ): Promise<void> => {
+      // Optimistic update — runs synchronously before the first `await`, so React
+      // batches it with the dragItems-clearing update in handleDragEnd and the UI
+      // never flashes back to the old position (Bug 1).
+      const currentCards = get(cardsStore)
+      cardsStore.set(
+        buildOptimisticMovedCards(currentCards, cardId, toColumnId, toIndex),
+      )
+
       await safely(async () => {
-        await cardService.move(cardId, toColumnId, toIndex)
-        const boardId = get(activeBoardIdStore)
-        if (boardId) await loadBoardData(boardId)
+        try {
+          await cardService.move(cardId, toColumnId, toIndex)
+        } finally {
+          const boardId = get(activeBoardIdStore)
+          if (boardId) await loadBoardData(boardId)
+        }
       })
     },
     [safely, loadBoardData]
