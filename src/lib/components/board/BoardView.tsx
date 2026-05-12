@@ -259,15 +259,13 @@ export function BoardView({
 
     setOverColumnId(destColId)
 
-    // Skip true within-original-column moves: CSS transforms already handle the
-    // visual reordering, so updating state here would cause measureRects to fire
-    // continuously (Bug 2). We use originalColIdRef (not currentColId) so this
-    // guard stays valid even when the card has temporarily moved to another column
-    // and back, enabling empty-column drops (Bug 4).
-    if (
-      currentColId === originalColIdRef.current &&
-      destColId === originalColIdRef.current
-    ) {
+    // Skip all within-current-column hovers: useSortable's CSS transforms already
+    // handle the visual reordering, so calling setDragItems here would give
+    // SortableContext a new items array reference → measureRects layoutEffect →
+    // another onDragOver → setDragItems → infinite loop, regardless of which
+    // column the card is currently in. This applies to the original column AND
+    // any column the card has been moved into via a cross-column dragOver.
+    if (currentColId === destColId) {
       return
     }
 
@@ -320,26 +318,69 @@ export function BoardView({
       const activeId = String(active.id)
       const overId = String(over.id)
       const c2c = dragCardToColumnRef.current
-      const destColId =
-        c2c?.get(activeId) ??
-        Object.keys(final).find((colId) => final[colId].includes(activeId))
 
-      if (destColId) {
-        // Within-original-column: handleDragOver never updated dragItems for
-        // within-column moves, so we compute the final index from `over` via
-        // arrayMove on the (unchanged) snapshot (Bug 2).
-        if (destColId === originalColId && !columnIdSet.has(overId)) {
-          const items = final[originalColId]
-          const fromIndex = items.indexOf(activeId)
-          const toIndex = items.indexOf(overId)
-          if (fromIndex >= 0 && toIndex >= 0 && fromIndex !== toIndex) {
-            onDrop(activeId, originalColId, toIndex)
-          }
-          // fromIndex === toIndex → dropped on self or no effective move → no-op
+      // Determine the column the active card is currently tracked in.
+      const currentColId = c2c?.get(activeId) ?? null
+
+      // Determine destination column from what was under the pointer at release.
+      // Prefer the over-item's column; fall back to currentColId if over is the
+      // active card itself (released without moving off it).
+      const destColId = columnIdSet.has(overId)
+        ? overId
+        : overId !== activeId
+          ? (c2c?.get(overId) ?? currentColId)
+          : currentColId
+
+      if (destColId && currentColId) {
+        // Compute the final insertion index using the same pointer-half logic as
+        // handleDragOver. This handles all cases:
+        //   • Within-original-column: dragItems was never updated for same-column
+        //     hovers, so CSS transforms determined the visual position; we derive
+        //     the final index from over.id.
+        //   • Within-non-original-column: card entered this column via a
+        //     cross-column dragOver; subsequent within-column hovers were skipped,
+        //     so we must compute from over.id here rather than from the stale
+        //     snapshot position in final[destColId].
+        //   • Cross-column: same formula, snapshot already correct.
+        const colItems = final[destColId] ?? []
+        const withoutActive = colItems.filter((id) => id !== activeId)
+
+        let toIndex: number
+        if (columnIdSet.has(overId)) {
+          // Released on the column container → append.
+          toIndex = withoutActive.length
+        } else if (overId === activeId) {
+          // Released exactly on itself without moving → preserve current position.
+          const snapshotPos = colItems.indexOf(activeId)
+          toIndex = snapshotPos >= 0 ? snapshotPos : 0
         } else {
-          // Cross-column: position is already correct in the snapshot.
-          const toIndex = final[destColId].indexOf(activeId)
-          onDrop(activeId, destColId, toIndex < 0 ? 0 : toIndex)
+          const overIndex = withoutActive.indexOf(overId)
+          if (overIndex < 0) {
+            // over is in a different column (shouldn't normally happen) → fallback.
+            const snapshotPos = colItems.indexOf(activeId)
+            toIndex = snapshotPos >= 0 ? snapshotPos : 0
+          } else {
+            toIndex = overIndex
+            if (active.rect.current.translated != null) {
+              const isBelowCenter =
+                active.rect.current.translated.top >
+                over.rect.top + over.rect.height / 2
+              toIndex = overIndex + (isBelowCenter ? 1 : 0)
+            }
+          }
+        }
+
+        // For a pure within-original-column drop, skip the call when the card
+        // ended up at the same index it started from (no effective reorder).
+        const isPureWithinOriginal =
+          destColId === originalColId && currentColId === originalColId
+        if (isPureWithinOriginal) {
+          const fromIndex = colItems.indexOf(activeId)
+          if (fromIndex !== toIndex) {
+            onDrop(activeId, destColId, toIndex)
+          }
+        } else {
+          onDrop(activeId, destColId, toIndex)
         }
       }
     }
