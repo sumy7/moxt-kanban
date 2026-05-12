@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from "react"
+import { useState, useCallback, useRef, useMemo } from "react"
 import {
   DndContext,
   DragOverlay,
@@ -17,7 +17,6 @@ import {
 import {
   SortableContext,
   useSortable,
-  arrayMove,
   verticalListSortingStrategy,
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable"
@@ -157,29 +156,40 @@ export function BoardView({
     null
   )
   const [overColumnId, setOverColumnId] = useState<string | null>(null)
+
   const dragItemsRef = useRef<Record<string, string[]> | null>(null)
   const dragCardToColumnRef = useRef<Map<string, string> | null>(null)
-  const pendingClearRef = useRef(false)
-
-  useEffect(() => {
-    if (pendingClearRef.current) {
-      pendingClearRef.current = false
-      setDragItems(null)
-      dragItemsRef.current = null
-      dragCardToColumnRef.current = null
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cards])
+  // Set in handleDragStart and never mutated during drag — used to detect true
+  // within-original-column moves so we can skip redundant state updates (Bug 2/4).
+  const originalColIdRef = useRef<string | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   )
 
-  const columnIdSet = new Set(columns.map((c) => c.id))
-  // Shared lookup for render and drag overlay; avoids rebuilding in each column render.
+  const columnIdSet = useMemo(
+    () => new Set(columns.map((c) => c.id)),
+    [columns]
+  )
+  // Shared card lookup for render loop and drag overlay.
   const cardMap = useMemo(() => new Map(cards.map((c) => [c.id, c])), [cards])
   const activeCard = activeCardId ? (cardMap.get(activeCardId) ?? null) : null
+
+  // Memoised per-column id arrays. Deliberately excludes `overColumnId` so that
+  // highlight-only re-renders do NOT produce new array references for SortableContext —
+  // preventing the measureRects layoutEffect loop (Bug 2).
+  const itemsPerColumn = useMemo((): Record<string, string[]> => {
+    if (dragItems) return dragItems
+    const map: Record<string, string[]> = {}
+    for (const col of columns) {
+      map[col.id] = cards
+        .filter((c) => c.columnId === col.id)
+        .sort((a, b) => a.order - b.order)
+        .map((c) => c.id)
+    }
+    return map
+  }, [dragItems, cards, columns])
 
   function buildItemsMap(): Record<string, string[]> {
     const map: Record<string, string[]> = {}
@@ -192,7 +202,9 @@ export function BoardView({
     return map
   }
 
-  function buildCardToColumnMap(items: Record<string, string[]>): Map<string, string> {
+  function buildCardToColumnMap(
+    items: Record<string, string[]>
+  ): Map<string, string> {
     const map = new Map<string, string>()
     for (const [colId, cardIds] of Object.entries(items)) {
       for (const cardId of cardIds) {
@@ -211,16 +223,18 @@ export function BoardView({
       if (colHit) return [colHit]
       return rectIntersection(args)
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [columns]
+    [columnIdSet]
   )
 
   function handleDragStart({ active }: DragStartEvent) {
-    setActiveCardId(String(active.id))
+    const activeId = String(active.id)
     const map = buildItemsMap()
+    const c2c = buildCardToColumnMap(map)
+    setActiveCardId(activeId)
     setDragItems(map)
     dragItemsRef.current = map
-    dragCardToColumnRef.current = buildCardToColumnMap(map)
+    dragCardToColumnRef.current = c2c
+    originalColIdRef.current = c2c.get(activeId) ?? null
   }
 
   function handleDragOver({ active, over }: DragOverEvent) {
@@ -233,11 +247,10 @@ export function BoardView({
 
     const activeId = String(active.id)
     const overId = String(over.id)
-
     if (activeId === overId) return
 
-    const sourceColId = cardToColumn.get(activeId)
-    if (!sourceColId) return
+    const currentColId = cardToColumn.get(activeId)
+    if (!currentColId) return
 
     const destColId = columnIdSet.has(overId)
       ? overId
@@ -246,60 +259,99 @@ export function BoardView({
 
     setOverColumnId(destColId)
 
-    let next: Record<string, string[]>
+    // Skip true within-original-column moves: CSS transforms already handle the
+    // visual reordering, so updating state here would cause measureRects to fire
+    // continuously (Bug 2). We use originalColIdRef (not currentColId) so this
+    // guard stays valid even when the card has temporarily moved to another column
+    // and back, enabling empty-column drops (Bug 4).
+    if (
+      currentColId === originalColIdRef.current &&
+      destColId === originalColIdRef.current
+    ) {
+      return
+    }
 
-    if (sourceColId === destColId) {
-      if (columnIdSet.has(overId)) return
-      const items = current[sourceColId]
-      const fromIndex = items.indexOf(activeId)
-      const toIndex = items.indexOf(overId)
-      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return
-      next = { ...current, [sourceColId]: arrayMove(items, fromIndex, toIndex) }
+    // ── Cross-column move (or reordering inside destination after a cross-column) ──
+
+    const sourceItems = current[currentColId] ?? []
+    // Remove activeId from the destination array first so indexOf gives the
+    // correct slot without an off-by-one shift (Bugs 3, 5).
+    const targetWithoutActive = (current[destColId] ?? []).filter(
+      (id) => id !== activeId
+    )
+
+    let toIndex: number
+    if (columnIdSet.has(overId)) {
+      // Hovering over the column container itself (empty column) → append (Bug 4).
+      toIndex = targetWithoutActive.length
     } else {
-      const sourceItems = current[sourceColId]
-      const targetItems = current[destColId] ?? []
-      const sourceIndex = sourceItems.indexOf(activeId)
-      if (sourceIndex < 0) return
-
-      let toIndex = targetItems.length
-      if (!columnIdSet.has(overId)) {
-        const overIndex = targetItems.indexOf(overId)
-        toIndex = overIndex < 0 ? targetItems.length : overIndex
-      }
-
-      const nextSourceItems = sourceItems.filter((id) => id !== activeId)
-      const nextTargetItems = [...targetItems]
-      nextTargetItems.splice(toIndex, 0, activeId)
-
-      next = {
-        ...current,
-        [sourceColId]: nextSourceItems,
-        [destColId]: nextTargetItems,
+      const overIndex = targetWithoutActive.indexOf(overId)
+      toIndex = overIndex < 0 ? targetWithoutActive.length : overIndex
+      // Pointer-half heuristic: insert before/after the hovered card based on
+      // whether the pointer is in the top or bottom half. This stabilises the
+      // result so the same pointer position always yields the same slot (Bugs 3, 5).
+      if (overIndex >= 0 && active.rect.current.translated != null) {
+        const isBelowCenter =
+          active.rect.current.translated.top >
+          over.rect.top + over.rect.height / 2
+        toIndex = overIndex + (isBelowCenter ? 1 : 0)
       }
     }
 
+    const nextSourceItems = sourceItems.filter((id) => id !== activeId)
+    const nextTargetItems = [...targetWithoutActive]
+    nextTargetItems.splice(toIndex, 0, activeId)
+
+    const next: Record<string, string[]> = {
+      ...current,
+      [currentColId]: nextSourceItems,
+      [destColId]: nextTargetItems,
+    }
     dragItemsRef.current = next
     setDragItems(next)
     dragCardToColumnRef.current = buildCardToColumnMap(next)
   }
 
-  function handleDragEnd({ active }: DragEndEvent) {
+  function handleDragEnd({ active, over }: DragEndEvent) {
     const final = dragItemsRef.current
-    if (final) {
+    const originalColId = originalColIdRef.current
+
+    if (final && originalColId && over) {
       const activeId = String(active.id)
-      const destColId = Object.keys(final).find((colId) =>
-        final[colId].includes(activeId)
-      )
+      const overId = String(over.id)
+      const c2c = dragCardToColumnRef.current
+      const destColId =
+        c2c?.get(activeId) ??
+        Object.keys(final).find((colId) => final[colId].includes(activeId))
+
       if (destColId) {
-        const toIndex = final[destColId].indexOf(activeId)
-        onDrop(activeId, destColId, toIndex < 0 ? 0 : toIndex)
+        // Within-original-column: handleDragOver never updated dragItems for
+        // within-column moves, so we compute the final index from `over` via
+        // arrayMove on the (unchanged) snapshot (Bug 2).
+        if (destColId === originalColId && !columnIdSet.has(overId)) {
+          const items = final[originalColId]
+          const fromIndex = items.indexOf(activeId)
+          const toIndex = items.indexOf(overId)
+          if (fromIndex >= 0 && toIndex >= 0 && fromIndex !== toIndex) {
+            onDrop(activeId, originalColId, toIndex)
+          }
+          // fromIndex === toIndex → dropped on self or no effective move → no-op
+        } else {
+          // Cross-column: position is already correct in the snapshot.
+          const toIndex = final[destColId].indexOf(activeId)
+          onDrop(activeId, destColId, toIndex < 0 ? 0 : toIndex)
+        }
       }
-      pendingClearRef.current = true
-    } else {
-      setDragItems(null)
-      dragItemsRef.current = null
-      dragCardToColumnRef.current = null
     }
+    // If over is null (released outside all droppables) → no onDrop, visual reverts.
+
+    // Clear drag state. With the optimistic update in drop(), the cards prop
+    // already reflects the new order by the time this clears dragItems, so
+    // there is no snap-back flash (Bug 1).
+    setDragItems(null)
+    dragItemsRef.current = null
+    dragCardToColumnRef.current = null
+    originalColIdRef.current = null
     setActiveCardId(null)
     setOverColumnId(null)
   }
@@ -310,6 +362,7 @@ export function BoardView({
     setOverColumnId(null)
     dragItemsRef.current = null
     dragCardToColumnRef.current = null
+    originalColIdRef.current = null
   }
 
   if (columns.length === 0) {
@@ -332,13 +385,10 @@ export function BoardView({
     >
       <div className="board-view">
         {columns.map((column) => {
-          const itemIds = dragItems
-            ? (dragItems[column.id] ?? [])
-            : cards
-                .filter((c) => c.columnId === column.id)
-                .sort((a, b) => a.order - b.order)
-                .map((c) => c.id)
-
+          // itemsPerColumn is memoised on [dragItems, cards, columns] so changing
+          // overColumnId (highlight-only re-render) does not produce new array
+          // references for SortableContext (Bug 2).
+          const itemIds = itemsPerColumn[column.id] ?? []
           const colCards = itemIds
             .map((id) => cardMap.get(id))
             .filter((c): c is Card => c != null)
@@ -348,7 +398,7 @@ export function BoardView({
           return (
             <div
               key={column.id}
-              className={`board-column${isOver ? "drop-target" : ""}`}
+              className={`board-column${isOver ? " drop-target" : ""}`}
             >
               <div className="column-header">
                 <span className="column-title">{column.title}</span>
