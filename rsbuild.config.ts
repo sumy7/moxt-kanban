@@ -19,6 +19,13 @@ export default defineConfig({
         tag: "script",
         children: `window.__APP_VERSION__ = ${JSON.stringify(appVersion)};`,
       },
+      {
+        tag: "link",
+        attrs: {
+          href: "https://cdn.jsdelivr.net/npm/@fontsource-variable/jetbrains-mono@5.2.8/index.css",
+          rel: "stylesheet",
+        },
+      },
     ],
   },
 })

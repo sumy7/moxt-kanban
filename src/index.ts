@@ -5,9 +5,13 @@ import { initializeDatabase } from "./lib/db/database"
 
 import "./index.css"
 
-await initializeDatabase()
+async function main() {
+  await initializeDatabase()
 
-const target = document.querySelector("#root") ?? document.body
-const root = createRoot(target)
+  const target = document.querySelector("#root") ?? document.body
+  const root = createRoot(target)
 
-root.render(createElement(StrictMode, null, createElement(App)))
+  root.render(createElement(StrictMode, null, createElement(App)))
+}
+
+main()
