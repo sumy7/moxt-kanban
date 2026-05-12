@@ -246,6 +246,7 @@ export function BoardView({
     const cardToColumn = dragCardToColumnRef.current
     if (!over || !current || !cardToColumn) {
       setOverColumnId(null)
+      projectedDropRef.current = null
       return
     }
 
@@ -338,9 +339,31 @@ export function BoardView({
 
       if (destColId && currentColId) {
         const colItems = final[destColId] ?? []
-        const rawToIndex =
-          projected?.toIndex ?? Math.max(0, colItems.indexOf(activeId))
-        const toIndex = Math.max(0, Math.min(rawToIndex, colItems.length))
+        const withoutActive = colItems.filter((id) => id !== activeId)
+        const fallbackToIndex = (() => {
+          if (columnIdSet.has(overId)) {
+            return withoutActive.length
+          }
+          if (overId === activeId) {
+            const currentPos = colItems.indexOf(activeId)
+            return currentPos >= 0 ? currentPos : 0
+          }
+          const overIndex = withoutActive.indexOf(overId)
+          if (overIndex < 0) {
+            const currentPos = colItems.indexOf(activeId)
+            return currentPos >= 0 ? currentPos : withoutActive.length
+          }
+          if (active.rect.current.translated !== null) {
+            const isBelowCenter =
+              active.rect.current.translated.top >
+              over.rect.top + over.rect.height / 2
+            return overIndex + (isBelowCenter ? 1 : 0)
+          }
+          return overIndex
+        })()
+
+        const rawToIndex = projected?.toIndex ?? fallbackToIndex
+        const toIndex = Math.max(0, Math.min(rawToIndex, withoutActive.length))
 
         // For a pure within-original-column drop, skip the call when the card
         // ended up at the same index it started from (no effective reorder).
