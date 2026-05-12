@@ -252,13 +252,9 @@ export function useCardActions({
       await safely(async () => {
         try {
           await cardService.move(cardId, toColumnId, toIndex)
+        } finally {
           const boardId = get(activeBoardIdStore)
           if (boardId) await loadBoardData(boardId)
-        } catch (error) {
-          // Roll back the optimistic update on error
-          const boardId = get(activeBoardIdStore)
-          if (boardId) await loadBoardData(boardId)
-          throw error
         }
       })
     },
