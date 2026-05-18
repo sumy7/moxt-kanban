@@ -23,6 +23,5 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/env.d.ts"],
-  "exclude": ["src/**/*.svelte", "src/**/*.svelte.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/env.d.ts"]
 }

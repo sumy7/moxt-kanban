@@ -19,6 +19,10 @@ import { EmptyState } from "../shared/EmptyState"
 import { formatDate } from "../../utils/date"
 import { useMemo } from "react"
 
+function sortIndicator(field: SortField, current: SortField, dir: SortDirection): string {
+  return current === field ? (dir === "desc" ? " ↓" : " ↑") : ""
+}
+
 type TableViewProps = {
   cards: Card[]
   columns: Column[]
@@ -57,8 +61,7 @@ export function TableView({
         accessorKey: "title",
         header: () => (
           <Button type="button" variant="ghost" onClick={() => onSort("title")}>
-            Title{" "}
-            {sortField === "title" ? (sortDirection === "desc" ? "↓" : "↑") : ""}
+            Title{sortIndicator("title", sortField, sortDirection)}
           </Button>
         ),
         cell: ({ row }) => (
@@ -74,12 +77,7 @@ export function TableView({
         accessorKey: "column",
         header: () => (
           <Button type="button" variant="ghost" onClick={() => onSort("column")}>
-            Status{" "}
-            {sortField === "column"
-              ? sortDirection === "desc"
-                ? "↓"
-                : "↑"
-              : ""}
+            Status{sortIndicator("column", sortField, sortDirection)}
           </Button>
         ),
       },
@@ -91,12 +89,7 @@ export function TableView({
             variant="ghost"
             onClick={() => onSort("priority")}
           >
-            Priority{" "}
-            {sortField === "priority"
-              ? sortDirection === "desc"
-                ? "↓"
-                : "↑"
-              : ""}
+            Priority{sortIndicator("priority", sortField, sortDirection)}
           </Button>
         ),
         cell: ({ row }) => (
@@ -122,12 +115,7 @@ export function TableView({
         accessorKey: "dueDate",
         header: () => (
           <Button type="button" variant="ghost" onClick={() => onSort("dueDate")}>
-            Due Date{" "}
-            {sortField === "dueDate"
-              ? sortDirection === "desc"
-                ? "↓"
-                : "↑"
-              : ""}
+            Due Date{sortIndicator("dueDate", sortField, sortDirection)}
           </Button>
         ),
         cell: ({ row }) => formatDate(row.original.dueDate),
@@ -140,12 +128,7 @@ export function TableView({
             variant="ghost"
             onClick={() => onSort("updatedAt")}
           >
-            Updated{" "}
-            {sortField === "updatedAt"
-              ? sortDirection === "desc"
-                ? "↓"
-                : "↑"
-              : ""}
+            Updated{sortIndicator("updatedAt", sortField, sortDirection)}
           </Button>
         ),
         cell: ({ row }) => formatDate(row.original.updatedAt),
@@ -158,12 +141,7 @@ export function TableView({
             variant="ghost"
             onClick={() => onSort("createdAt")}
           >
-            Created{" "}
-            {sortField === "createdAt"
-              ? sortDirection === "desc"
-                ? "↓"
-                : "↑"
-              : ""}
+            Created{sortIndicator("createdAt", sortField, sortDirection)}
           </Button>
         ),
         cell: ({ row }) => formatDate(row.original.createdAt),

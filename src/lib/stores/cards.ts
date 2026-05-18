@@ -1,4 +1,4 @@
-import { createStore } from "./store"
+import { createValueStore } from "./store"
 import type { Card } from "../types"
 
-export const cardsStore = createStore<Card[]>([])
+export const cardsStore = createValueStore<Card[]>([])

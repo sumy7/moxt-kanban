@@ -1,4 +1,4 @@
-import { createStore } from "./store"
+import { createValueStore } from "./store"
 import type { Column } from "../types"
 
-export const columnsStore = createStore<Column[]>([])
+export const columnsStore = createValueStore<Column[]>([])

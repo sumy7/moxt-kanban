@@ -1,5 +1,5 @@
-import { createStore } from "./store"
+import { createValueStore } from "./store"
 import type { Board } from "../types"
 
-export const boardsStore = createStore<Board[]>([])
-export const activeBoardIdStore = createStore<string | null>(null)
+export const boardsStore = createValueStore<Board[]>([])
+export const activeBoardIdStore = createValueStore<string | null>(null)

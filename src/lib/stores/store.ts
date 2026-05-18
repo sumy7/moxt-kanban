@@ -1,44 +1,60 @@
-import { useEffect, useState } from "react"
+import { createStore, useStore as useZustandStore } from "zustand"
+import type { StoreApi } from "zustand"
 
-export interface Store<T> {
-  get(): T
-  set(value: T): void
-  update(fn: (current: T) => T): void
-  subscribe(listener: (value: T) => void): () => void
+type ValueStoreState<T> = { value: T }
+
+export type ValueStore<T> = {
+  set: (value: T) => void
+  get: () => T
+  update: (fn: (current: T) => T) => void
 }
 
-export function createStore<T>(initial: T): Store<T> {
-  let value = initial
-  const listeners = new Set<(v: T) => void>()
+// WeakMap keeps the zustand store hidden — consumers can only access the
+// four documented methods on ValueStore<T>.
+const storeRegistry = new WeakMap<
+  ValueStore<unknown>,
+  StoreApi<ValueStoreState<unknown>>
+>()
 
-  return {
+export function createValueStore<T>(initial: T): ValueStore<T> {
+  const zustandStore = createStore<ValueStoreState<T>>()(() => ({
+    value: initial,
+  }))
+
+  const valueStore: ValueStore<T> = {
+    set(value: T) {
+      zustandStore.setState({ value })
+    },
     get() {
-      return value
+      return zustandStore.getState().value
     },
-    set(next) {
-      value = next
-      listeners.forEach((l) => l(next))
-    },
-    update(fn) {
-      const next = fn(value)
-      value = next
-      listeners.forEach((l) => l(next))
-    },
-    subscribe(listener) {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
+    update(fn: (current: T) => T) {
+      zustandStore.setState({ value: fn(zustandStore.getState().value) })
     },
   }
+
+  storeRegistry.set(
+    valueStore as ValueStore<unknown>,
+    zustandStore as StoreApi<ValueStoreState<unknown>>,
+  )
+
+  return valueStore
 }
 
-export function get<T>(store: Store<T>): T {
-  return store.get()
+/** React hook that subscribes to a ValueStore and returns its current value */
+export function useStore<T>(valueStore: ValueStore<T>): T {
+  const zustandStore = storeRegistry.get(
+    valueStore as ValueStore<unknown>,
+  ) as StoreApi<ValueStoreState<T>> | undefined
+  if (!zustandStore) {
+    throw new Error(
+      "useStore: the provided store was not created by createValueStore.",
+    )
+  }
+  return useZustandStore(zustandStore, (state) => state.value)
 }
 
-export function useStore<T>(store: Store<T>): T {
-  const [state, setState] = useState(() => store.get())
-  useEffect(() => store.subscribe(setState), [store])
-  return state
+/** Read the current value of a store outside of React */
+export function get<T>(valueStore: ValueStore<T>): T {
+  return valueStore.get()
 }

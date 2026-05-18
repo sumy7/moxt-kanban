@@ -23,12 +23,8 @@ function isDueDateMatch(card: Card, filters: CardFilters): boolean {
     return false;
   }
 
-  if (filters.dueDateMode === 'overdue' && card.dueDate) {
-    return new Date(card.dueDate).getTime() < Date.now();
-  }
-
-  if (filters.dueDateMode === 'overdue' && !card.dueDate) {
-    return false;
+  if (filters.dueDateMode === 'overdue') {
+    return !!card.dueDate && new Date(card.dueDate).getTime() < Date.now();
   }
 
   if (

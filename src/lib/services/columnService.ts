@@ -75,22 +75,15 @@ export const columnService = {
 
   async reorder(boardId: string, orderedColumnIds: string[]): Promise<void> {
     const now = nowIso();
-    const columns = await db.columns.where('boardId').equals(boardId).toArray();
-    const columnIdsInBoard = new Set(
-      columns.filter((c) => !c.deletedAt).map((column) => column.id),
-    );
-
     await db.transaction('rw', db.columns, async () => {
-      for (const [index, id] of orderedColumnIds.entries()) {
-        if (!columnIdsInBoard.has(id)) {
-          continue;
-        }
+      const columns = await db.columns.where('boardId').equals(boardId).toArray();
+      const orderMap = new Map(orderedColumnIds.map((id, i) => [id, i + 1]));
 
-        await db.columns.update(id, {
-          order: index + 1,
-          updatedAt: now,
-        });
-      }
+      const updates = columns
+        .filter((c) => !c.deletedAt && orderMap.has(c.id))
+        .map((c) => ({ ...c, order: orderMap.get(c.id)!, updatedAt: now }));
+
+      await db.columns.bulkPut(updates);
     });
   },
 };
