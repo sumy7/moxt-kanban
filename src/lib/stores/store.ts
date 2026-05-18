@@ -45,7 +45,12 @@ export function createValueStore<T>(initial: T): ValueStore<T> {
 export function useStore<T>(valueStore: ValueStore<T>): T {
   const zustandStore = storeRegistry.get(
     valueStore as ValueStore<unknown>,
-  ) as StoreApi<ValueStoreState<T>>
+  ) as StoreApi<ValueStoreState<T>> | undefined
+  if (!zustandStore) {
+    throw new Error(
+      "useStore: the provided store was not created by createValueStore.",
+    )
+  }
   return useZustandStore(zustandStore, (state) => state.value)
 }
 
