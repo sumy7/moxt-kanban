@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react"
+import { get } from "../stores/store"
 import { toastStore } from "../stores/ui"
 
 export function useNotifications() {
@@ -17,7 +18,7 @@ export function useNotifications() {
     }
     toastStore.set({ type: "success", message })
     timerRef.current = setTimeout(() => {
-      const current = toastStore.get()
+      const current = get(toastStore)
       if (current?.type === "success" && current.message === message) {
         toastStore.set(null)
       }

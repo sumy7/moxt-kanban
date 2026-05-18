@@ -22,6 +22,7 @@ import {
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { Button } from "@/components/ui/button"
+import { cn } from "../../../lib/utils"
 import type { Card, Column } from "../../types"
 import { EmptyState } from "../shared/EmptyState"
 
@@ -118,7 +119,7 @@ function SortableCard({ card, onEditCard, onDeleteCard }: SortableCardProps) {
       }}
       {...attributes}
       {...listeners}
-      className={`board-card ${priorityClass(card.priority)}${isDragging ? "dragging" : ""}`}
+      className={cn("board-card", priorityClass(card.priority), isDragging && "dragging")}
     >
       <CardBody
         card={card}
@@ -176,21 +177,6 @@ export function BoardView({
   const cardMap = useMemo(() => new Map(cards.map((c) => [c.id, c])), [cards])
   const activeCard = activeCardId ? (cardMap.get(activeCardId) ?? null) : null
 
-  // Memoised per-column id arrays. Deliberately excludes `overColumnId` so that
-  // highlight-only re-renders do NOT produce new array references for SortableContext —
-  // preventing the measureRects layoutEffect loop (Bug 2).
-  const itemsPerColumn = useMemo((): Record<string, string[]> => {
-    if (dragItems) return dragItems
-    const map: Record<string, string[]> = {}
-    for (const col of columns) {
-      map[col.id] = cards
-        .filter((c) => c.columnId === col.id)
-        .sort((a, b) => a.order - b.order)
-        .map((c) => c.id)
-    }
-    return map
-  }, [dragItems, cards, columns])
-
   function buildItemsMap(): Record<string, string[]> {
     const map: Record<string, string[]> = {}
     for (const col of columns) {
@@ -201,6 +187,15 @@ export function BoardView({
     }
     return map
   }
+
+  // Memoised per-column id arrays. Deliberately excludes `overColumnId` so that
+  // highlight-only re-renders do NOT produce new array references for SortableContext —
+  // preventing the measureRects layoutEffect loop (Bug 2).
+  const itemsPerColumn = useMemo((): Record<string, string[]> => {
+    if (dragItems) return dragItems
+    return buildItemsMap()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragItems, cards, columns])
 
   function buildCardToColumnMap(
     items: Record<string, string[]>
@@ -439,7 +434,7 @@ export function BoardView({
           return (
             <div
               key={column.id}
-              className={`board-column${isOver ? "drop-target" : ""}`}
+              className={cn("board-column", isOver && "drop-target")}
             >
               <div className="column-header">
                 <span className="column-title">{column.title}</span>

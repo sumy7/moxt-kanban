@@ -18,6 +18,8 @@ export const boardService = {
   },
 
   async findUpdatedSince(since: string): Promise<Board[]> {
+    // Intentionally returns soft-deleted records (deletedAt != null) so that
+    // syncService.mergeBoards() can detect and remove them from the in-memory store.
     return db.boards.where('updatedAt').aboveOrEqual(since).toArray();
   },
 

@@ -184,6 +184,7 @@ export const cardService = {
           ? sourceWithoutMoving
           : targetCards.filter((item) => item.id !== cardId);
 
+      const now = nowIso();
       const insertIndex = Math.max(
         0,
         Math.min(toIndex, targetWithoutMoving.length),
@@ -191,11 +192,10 @@ export const cardService = {
       const movedCard: Card = {
         ...card,
         columnId: toColumnId,
-        updatedAt: nowIso(),
+        updatedAt: now,
       };
       targetWithoutMoving.splice(insertIndex, 0, movedCard);
 
-      const now = nowIso();
       const updates: Card[] = [];
 
       updates.push(
