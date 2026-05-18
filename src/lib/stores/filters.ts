@@ -1,4 +1,4 @@
-import { createStore } from "./store"
+import { createValueStore } from "./store"
 import type { CardFilters } from "../types"
 
 export const defaultFilters: CardFilters = {
@@ -14,4 +14,4 @@ export const defaultFilters: CardFilters = {
   viewMode: "board",
 }
 
-export const filtersStore = createStore<CardFilters>(defaultFilters)
+export const filtersStore = createValueStore<CardFilters>(defaultFilters)

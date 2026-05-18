@@ -118,7 +118,7 @@ function SortableCard({ card, onEditCard, onDeleteCard }: SortableCardProps) {
       }}
       {...attributes}
       {...listeners}
-      className={`board-card ${priorityClass(card.priority)}${isDragging ? " dragging" : ""}`}
+      className={`board-card ${priorityClass(card.priority)}${isDragging ? "dragging" : ""}`}
     >
       <CardBody
         card={card}
@@ -159,9 +159,6 @@ export function BoardView({
 
   const dragItemsRef = useRef<Record<string, string[]> | null>(null)
   const dragCardToColumnRef = useRef<Map<string, string> | null>(null)
-  const projectedDropRef = useRef<{ columnId: string; toIndex: number } | null>(
-    null
-  )
   // Set in handleDragStart and never mutated during drag — used to detect true
   // within-original-column moves so we can skip redundant state updates (Bug 2/4).
   const originalColIdRef = useRef<string | null>(null)
@@ -238,7 +235,6 @@ export function BoardView({
     dragItemsRef.current = map
     dragCardToColumnRef.current = c2c
     originalColIdRef.current = c2c.get(activeId) ?? null
-    projectedDropRef.current = null
   }
 
   function handleDragOver({ active, over }: DragOverEvent) {
@@ -246,7 +242,6 @@ export function BoardView({
     const cardToColumn = dragCardToColumnRef.current
     if (!over || !current || !cardToColumn) {
       setOverColumnId(null)
-      projectedDropRef.current = null
       return
     }
 
@@ -264,9 +259,21 @@ export function BoardView({
 
     setOverColumnId(destColId)
 
+    // Skip all within-current-column hovers: useSortable's CSS transforms already
+    // handle the visual reordering, so calling setDragItems here would give
+    // SortableContext a new items array reference → measureRects layoutEffect →
+    // another onDragOver → setDragItems → infinite loop, regardless of which
+    // column the card is currently in. This applies to the original column AND
+    // any column the card has been moved into via a cross-column dragOver.
+    if (currentColId === destColId) {
+      return
+    }
+
+    // ── Cross-column move (or reordering inside destination after a cross-column) ──
+
     const sourceItems = current[currentColId] ?? []
     // Remove activeId from the destination array first so indexOf gives the
-    // correct slot without an off-by-one shift.
+    // correct slot without an off-by-one shift (Bugs 3, 5).
     const targetWithoutActive = (current[destColId] ?? []).filter(
       (id) => id !== activeId
     )
@@ -287,17 +294,6 @@ export function BoardView({
           over.rect.top + over.rect.height / 2
         toIndex = overIndex + (isBelowCenter ? 1 : 0)
       }
-    }
-
-    projectedDropRef.current = { columnId: destColId, toIndex }
-
-    // Skip all within-current-column hovers: useSortable's CSS transforms already
-    // handle the visual reordering, so calling setDragItems here would give
-    // SortableContext a new items array reference → measureRects layoutEffect →
-    // another onDragOver → setDragItems → infinite loop, regardless of which
-    // column the card is currently in.
-    if (currentColId === destColId) {
-      return
     }
 
     const nextSourceItems = sourceItems.filter((id) => id !== activeId)
@@ -322,48 +318,57 @@ export function BoardView({
       const activeId = String(active.id)
       const overId = String(over.id)
       const c2c = dragCardToColumnRef.current
-      const projected = projectedDropRef.current
 
       // Determine the column the active card is currently tracked in.
       const currentColId = c2c?.get(activeId) ?? null
 
-      // Prefer the last projected target from dragOver so drop result stays
-      // consistent with the preview position during rapid pointer movement.
-      const destColId =
-        projected?.columnId ??
-        (columnIdSet.has(overId)
-          ? overId
-          : overId !== activeId
-            ? (c2c?.get(overId) ?? currentColId)
-            : currentColId)
+      // Determine destination column from what was under the pointer at release.
+      // Prefer the over-item's column; fall back to currentColId if over is the
+      // active card itself (released without moving off it).
+      const destColId = columnIdSet.has(overId)
+        ? overId
+        : overId !== activeId
+          ? (c2c?.get(overId) ?? currentColId)
+          : currentColId
 
       if (destColId && currentColId) {
+        // Compute the final insertion index using the same pointer-half logic as
+        // handleDragOver. This handles all cases:
+        //   • Within-original-column: dragItems was never updated for same-column
+        //     hovers, so CSS transforms determined the visual position; we derive
+        //     the final index from over.id.
+        //   • Within-non-original-column: card entered this column via a
+        //     cross-column dragOver; subsequent within-column hovers were skipped,
+        //     so we must compute from over.id here rather than from the stale
+        //     snapshot position in final[destColId].
+        //   • Cross-column: same formula, snapshot already correct.
         const colItems = final[destColId] ?? []
         const withoutActive = colItems.filter((id) => id !== activeId)
-        const fallbackToIndex = (() => {
-          if (columnIdSet.has(overId)) {
-            return withoutActive.length
-          }
-          if (overId === activeId) {
-            const currentPos = colItems.indexOf(activeId)
-            return currentPos >= 0 ? currentPos : 0
-          }
+
+        let toIndex: number
+        if (columnIdSet.has(overId)) {
+          // Released on the column container → append.
+          toIndex = withoutActive.length
+        } else if (overId === activeId) {
+          // Released exactly on itself without moving → preserve current position.
+          const snapshotPos = colItems.indexOf(activeId)
+          toIndex = snapshotPos >= 0 ? snapshotPos : 0
+        } else {
           const overIndex = withoutActive.indexOf(overId)
           if (overIndex < 0) {
-            const currentPos = colItems.indexOf(activeId)
-            return currentPos >= 0 ? currentPos : withoutActive.length
+            // over is in a different column (shouldn't normally happen) → fallback.
+            const snapshotPos = colItems.indexOf(activeId)
+            toIndex = snapshotPos >= 0 ? snapshotPos : 0
+          } else {
+            toIndex = overIndex
+            if (active.rect.current.translated != null) {
+              const isBelowCenter =
+                active.rect.current.translated.top >
+                over.rect.top + over.rect.height / 2
+              toIndex = overIndex + (isBelowCenter ? 1 : 0)
+            }
           }
-          if (active.rect.current.translated !== null) {
-            const isBelowCenter =
-              active.rect.current.translated.top >
-              over.rect.top + over.rect.height / 2
-            return overIndex + (isBelowCenter ? 1 : 0)
-          }
-          return overIndex
-        })()
-
-        const rawToIndex = projected?.toIndex ?? fallbackToIndex
-        const toIndex = Math.max(0, Math.min(rawToIndex, withoutActive.length))
+        }
 
         // For a pure within-original-column drop, skip the call when the card
         // ended up at the same index it started from (no effective reorder).
@@ -388,7 +393,6 @@ export function BoardView({
     dragItemsRef.current = null
     dragCardToColumnRef.current = null
     originalColIdRef.current = null
-    projectedDropRef.current = null
     setActiveCardId(null)
     setOverColumnId(null)
   }
@@ -400,7 +404,6 @@ export function BoardView({
     dragItemsRef.current = null
     dragCardToColumnRef.current = null
     originalColIdRef.current = null
-    projectedDropRef.current = null
   }
 
   if (columns.length === 0) {
@@ -436,7 +439,7 @@ export function BoardView({
           return (
             <div
               key={column.id}
-              className={`board-column${isOver ? " drop-target" : ""}`}
+              className={`board-column${isOver ? "drop-target" : ""}`}
             >
               <div className="column-header">
                 <span className="column-title">{column.title}</span>

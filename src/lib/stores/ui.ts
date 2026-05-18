@@ -1,8 +1,8 @@
-import { createStore } from "./store"
+import { createValueStore } from "./store"
 
 type Toast = {
   type: "success" | "error"
   message: string
 }
 
-export const toastStore = createStore<Toast | null>(null)
+export const toastStore = createValueStore<Toast | null>(null)

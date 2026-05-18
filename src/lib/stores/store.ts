@@ -1,44 +1,39 @@
-import { useEffect, useState } from "react"
+import { createStore, useStore as useZustandStore } from "zustand"
+import type { StoreApi } from "zustand"
 
-export interface Store<T> {
-  get(): T
-  set(value: T): void
-  update(fn: (current: T) => T): void
-  subscribe(listener: (value: T) => void): () => void
+type ValueStoreState<T> = { value: T }
+
+export type ValueStore<T> = {
+  set: (value: T) => void
+  get: () => T
+  update: (fn: (current: T) => T) => void
+  /** Internal zustand store — used by useStore hook */
+  _store: StoreApi<ValueStoreState<T>>
 }
 
-export function createStore<T>(initial: T): Store<T> {
-  let value = initial
-  const listeners = new Set<(v: T) => void>()
+export function createValueStore<T>(initial: T): ValueStore<T> {
+  const store = createStore<ValueStoreState<T>>()(() => ({ value: initial }))
 
   return {
+    set(value: T) {
+      store.setState({ value })
+    },
     get() {
-      return value
+      return store.getState().value
     },
-    set(next) {
-      value = next
-      listeners.forEach((l) => l(next))
+    update(fn: (current: T) => T) {
+      store.setState({ value: fn(store.getState().value) })
     },
-    update(fn) {
-      const next = fn(value)
-      value = next
-      listeners.forEach((l) => l(next))
-    },
-    subscribe(listener) {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
+    _store: store,
   }
 }
 
-export function get<T>(store: Store<T>): T {
-  return store.get()
+/** React hook that subscribes to a ValueStore and returns its current value */
+export function useStore<T>(valueStore: ValueStore<T>): T {
+  return useZustandStore(valueStore._store, (state) => state.value)
 }
 
-export function useStore<T>(store: Store<T>): T {
-  const [state, setState] = useState(() => store.get())
-  useEffect(() => store.subscribe(setState), [store])
-  return state
+/** Read the current value of a store outside of React */
+export function get<T>(valueStore: ValueStore<T>): T {
+  return valueStore.get()
 }
