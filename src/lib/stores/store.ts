@@ -7,30 +7,46 @@ export type ValueStore<T> = {
   set: (value: T) => void
   get: () => T
   update: (fn: (current: T) => T) => void
-  /** Internal zustand store — used by useStore hook */
-  _store: StoreApi<ValueStoreState<T>>
 }
 
-export function createValueStore<T>(initial: T): ValueStore<T> {
-  const store = createStore<ValueStoreState<T>>()(() => ({ value: initial }))
+// WeakMap keeps the zustand store hidden — consumers can only access the
+// four documented methods on ValueStore<T>.
+const storeRegistry = new WeakMap<
+  ValueStore<unknown>,
+  StoreApi<ValueStoreState<unknown>>
+>()
 
-  return {
+export function createValueStore<T>(initial: T): ValueStore<T> {
+  const zustandStore = createStore<ValueStoreState<T>>()(() => ({
+    value: initial,
+  }))
+
+  const valueStore: ValueStore<T> = {
     set(value: T) {
-      store.setState({ value })
+      zustandStore.setState({ value })
     },
     get() {
-      return store.getState().value
+      return zustandStore.getState().value
     },
     update(fn: (current: T) => T) {
-      store.setState({ value: fn(store.getState().value) })
+      zustandStore.setState({ value: fn(zustandStore.getState().value) })
     },
-    _store: store,
   }
+
+  storeRegistry.set(
+    valueStore as ValueStore<unknown>,
+    zustandStore as StoreApi<ValueStoreState<unknown>>,
+  )
+
+  return valueStore
 }
 
 /** React hook that subscribes to a ValueStore and returns its current value */
 export function useStore<T>(valueStore: ValueStore<T>): T {
-  return useZustandStore(valueStore._store, (state) => state.value)
+  const zustandStore = storeRegistry.get(
+    valueStore as ValueStore<unknown>,
+  ) as StoreApi<ValueStoreState<T>>
+  return useZustandStore(zustandStore, (state) => state.value)
 }
 
 /** Read the current value of a store outside of React */

@@ -177,7 +177,7 @@ export function BoardView({
   const cardMap = useMemo(() => new Map(cards.map((c) => [c.id, c])), [cards])
   const activeCard = activeCardId ? (cardMap.get(activeCardId) ?? null) : null
 
-  function buildItemsMap(): Record<string, string[]> {
+  const buildItemsMap = useCallback((): Record<string, string[]> => {
     const map: Record<string, string[]> = {}
     for (const col of columns) {
       map[col.id] = cards
@@ -186,7 +186,7 @@ export function BoardView({
         .map((c) => c.id)
     }
     return map
-  }
+  }, [columns, cards])
 
   // Memoised per-column id arrays. Deliberately excludes `overColumnId` so that
   // highlight-only re-renders do NOT produce new array references for SortableContext —
@@ -194,8 +194,7 @@ export function BoardView({
   const itemsPerColumn = useMemo((): Record<string, string[]> => {
     if (dragItems) return dragItems
     return buildItemsMap()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dragItems, cards, columns])
+  }, [dragItems, buildItemsMap])
 
   function buildCardToColumnMap(
     items: Record<string, string[]>

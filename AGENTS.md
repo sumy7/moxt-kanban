@@ -47,7 +47,7 @@ src/
 
 The project uses a **custom store system** (`src/lib/stores/store.ts`) — a lightweight pub/sub store with a `useStore` React hook for reactive subscriptions:
 
-- `createStore<T>(initial)` — creates a store with `get()`, `set()`, `update()`, `subscribe()`
+- `createValueStore<T>(initial)` — creates a store with `get()`, `set()`, `update()`
 - `useStore(store)` — React hook that subscribes to a store and returns its current value
 - `get(store)` — reads a store's value outside React components (used in services)
 

@@ -98,7 +98,7 @@ pnpm run typecheck     # TypeScript 类型检查
 
 使用自定义轻量级 pub/sub store 系统：
 
-- `createStore<T>(initial)` 创建 store
+- `createValueStore<T>(initial)` 创建 store
 - `useStore(store)` React hook 订阅 store 变化
 - `get(store)` 在 React 组件外同步读取 store 值
 
